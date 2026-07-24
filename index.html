@@ -402,6 +402,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Sales</label><input type="text" id="m-sales" placeholder="Nama Sales"></div>
         <div class="form-group"><label>Customer</label><input type="text" id="m-customer" placeholder="Nama Customer"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="m-pic" placeholder="Nama PIC"></div>
+        <div class="form-group full"><label>Alamat Customer</label><textarea id="m-alamat" placeholder="Alamat lengkap customer"></textarea></div>
         <div class="form-group full"><label>Nama Barang</label><input type="text" id="m-barang" placeholder="Nama lengkap mesin"></div>
         <div class="form-group"><label>QTY</label><input type="number" id="m-qty" value="1" min="1"></div>
         <div class="form-group"><label>No. Seri</label><input type="text" id="m-seri" placeholder="No. Seri"></div>
@@ -449,6 +450,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>PIC Handled</label><input type="text" id="s-pic-handled" placeholder="Nama PIC"></div>
         <div class="form-group"><label>Customer</label><input type="text" id="s-customer" placeholder="Nama Customer"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="s-pic" placeholder="Nama PIC"></div>
+        <div class="form-group full"><label>Alamat Customer</label><textarea id="s-alamat" placeholder="Alamat lengkap customer"></textarea></div>
         <div class="form-group full"><label>Nama Barang</label><input type="text" id="s-barang" placeholder="Nama lengkap sparepart/jasa"></div>
         <div class="form-group"><label>Jenis</label><select id="s-jenis"><option value="Sparepart">Sparepart</option><option value="Jasa">Jasa</option></select></div>
         <div class="form-group"><label>QTY</label><input type="number" id="s-qty" value="1" min="1"></div>
@@ -1382,7 +1384,7 @@ function openAddMesin(){
   editingId=null;payRows=[];
   seriImgData=null; seriHasExistingImg=false; renderSeriImg(null);
   document.getElementById('modal-mesin-title').textContent='Tambah Penjualan Mesin';
-  ['m-tgl-po','m-sales','m-customer','m-pic','m-barang','m-seri','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
+  ['m-tgl-po','m-sales','m-customer','m-pic','m-alamat','m-barang','m-seri','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-qty').value=1;
   ['m-dpp','m-ppn','m-total','m-ar'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-status').value='BELUM';
@@ -1408,6 +1410,7 @@ async function editMesin(id){
   document.getElementById('m-sales').value=r.sales||'';
   document.getElementById('m-customer').value=r.customer||'';
   document.getElementById('m-pic').value=r.pic||'';
+  document.getElementById('m-alamat').value=r.alamat||'';
   document.getElementById('m-barang').value=r.barang||'';
   document.getElementById('m-qty').value=r.qty||1;
   document.getElementById('m-seri').value=r.seri||'';
@@ -1427,7 +1430,7 @@ async function saveMesin(){
     toast('Foto No. Seri wajib diupload','error');
     return;
   }
-  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,barang:document.getElementById('m-barang').value,qty:Number(document.getElementById('m-qty').value),seri:document.getElementById('m-seri').value,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:document.getElementById('m-barang').value,qty:Number(document.getElementById('m-qty').value),seri:document.getElementById('m-seri').value,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=payRows.map(p=>({tgl:p.tgl,jumlah:p.jumlah,rek:p.rek,ket:p.ket}));
   data.payments=cleanPay;
   const finalId=editingId||uid();
@@ -1460,7 +1463,7 @@ function calcSpareTotal(){
 function openAddSpare(){
   editingId=null;payRows=[];
   document.getElementById('modal-spare-title').textContent='Tambah Penjualan Spareparts';
-  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-pic-handled','s-customer','s-pic','s-barang','s-seri','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
+  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-pic-handled','s-customer','s-pic','s-alamat','s-barang','s-seri','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s-qty').value=1;
   ['s-harga','s-dpp','s-ppn','s-total','s-ar'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s-status').value='BELUM';
@@ -1485,6 +1488,7 @@ async function editSpare(id){
   document.getElementById('s-pic-handled').value=r.picHandled||'';
   document.getElementById('s-customer').value=r.customer||'';
   document.getElementById('s-pic').value=r.pic||'';
+  document.getElementById('s-alamat').value=r.alamat||'';
   document.getElementById('s-barang').value=r.barang||'';
   document.getElementById('s-jenis').value=r.jenis||'Sparepart';
   document.getElementById('s-qty').value=r.qty||1;
@@ -1502,7 +1506,7 @@ async function editSpare(id){
   renderPayRows('spare');openModal('modal-spare');
 }
 async function saveSpare(){
-  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,barang:document.getElementById('s-barang').value,jenis:document.getElementById('s-jenis').value,qty:Number(document.getElementById('s-qty').value),seri:document.getElementById('s-seri').value,harga:Number(document.getElementById('s-harga').value)||0,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:document.getElementById('s-barang').value,jenis:document.getElementById('s-jenis').value,qty:Number(document.getElementById('s-qty').value),seri:document.getElementById('s-seri').value,harga:Number(document.getElementById('s-harga').value)||0,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=payRows.map(p=>({tgl:p.tgl,jumlah:p.jumlah,rek:p.rek,ket:p.ket}));
   data.payments=cleanPay;
   const finalId=editingId||uid();
