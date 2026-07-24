@@ -1121,28 +1121,33 @@ function paginationHTML_(current, totalPages, gotoFnName){
 }
 // Drag-to-scroll pakai mouse (klik-tahan-geser) supaya di browser PC juga
 // bisa "swipe" kiri/kanan membaca kolom tabel yang lebar, tanpa perlu
-// scrollbar bawah.
+// scrollbar bawah. Pakai Pointer Events + setPointerCapture supaya drag
+// tetap terbaca meski mouse sempat keluar sedikit dari area tabel saat
+// digeser cepat (ini yang menyebabkan drag "putus" di beberapa level zoom
+// browser seperti 90%/110%/120% kalau pakai mouse events biasa).
 function enableDragScroll_(el){
   if(!el || el._dragScrollBound) return;
   el._dragScrollBound=true;
-  let isDown=false,hasMoved=false,startX=0,scrollStart=0;
-  el.addEventListener('mousedown',e=>{
+  let isDown=false,hasMoved=false,startX=0,scrollStart=0,pid=null;
+  el.addEventListener('pointerdown',e=>{
+    if(e.pointerType==='mouse' && e.button!==0) return;
+    if(e.target.closest('button,a,input,select,textarea,label')) return;
     isDown=true; hasMoved=false;
-    startX=e.pageX; scrollStart=el.scrollLeft;
+    startX=e.clientX; scrollStart=el.scrollLeft; pid=e.pointerId;
+    try{ el.setPointerCapture(pid); }catch(_){}
   });
-  window.addEventListener('mouseup',()=>{
-    isDown=false;
+  el.addEventListener('pointerup',endDrag_);
+  el.addEventListener('pointercancel',endDrag_);
+  function endDrag_(e){
+    if(pid!==null){ try{ el.releasePointerCapture(pid); }catch(_){} }
+    isDown=false; pid=null;
     if(hasMoved) el.classList.remove('dragging');
     hasMoved=false;
-  });
-  el.addEventListener('mouseleave',()=>{
-    if(hasMoved) el.classList.remove('dragging');
-    isDown=false; hasMoved=false;
-  });
-  el.addEventListener('mousemove',e=>{
+  }
+  el.addEventListener('pointermove',e=>{
     if(!isDown) return;
-    const dx=e.pageX-startX;
-    if(!hasMoved && Math.abs(dx)>5){ hasMoved=true; el.classList.add('dragging'); }
+    const dx=e.clientX-startX;
+    if(!hasMoved && Math.abs(dx)>4){ hasMoved=true; el.classList.add('dragging'); }
     if(!hasMoved) return;
     e.preventDefault();
     el.scrollLeft = scrollStart-dx;
