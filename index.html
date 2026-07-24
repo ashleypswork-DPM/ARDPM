@@ -228,6 +228,15 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .ar-value{font-weight:700;color:var(--belum);}
 .currency{font-variant-numeric:tabular-nums;}
 .section-divider{font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;margin:14px 0 9px;padding-bottom:5px;border-bottom:1px solid var(--border);}
+
+/* SPLASH SCREEN */
+#splash{position:fixed;inset:0;z-index:9999;background:linear-gradient(160deg,#0b3d91,var(--primary));display:flex;flex-direction:column;align-items:center;justify-content:center;transition:opacity .5s ease,visibility .5s ease;}
+#splash.splash-hide{opacity:0;visibility:hidden;pointer-events:none;}
+.splash-logo{font-size:44px;font-weight:800;color:#fff;letter-spacing:2px;text-shadow:0 4px 18px rgba(0,0,0,.25);}
+.splash-sub{font-size:11px;font-weight:700;color:rgba(255,255,255,.75);letter-spacing:3px;text-transform:uppercase;margin-top:6px;}
+.splash-bar-track{width:200px;max-width:60vw;height:6px;background:rgba(255,255,255,.22);border-radius:10px;overflow:hidden;margin-top:28px;}
+.splash-bar-fill{height:100%;width:0%;background:var(--accent);border-radius:10px;transition:width 3s linear;}
+.splash-pct{margin-top:10px;font-size:11px;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:.5px;}
 .sales-manage-item{display:flex;align-items:center;gap:9px;padding:9px 12px;background:#f8f9fb;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
 .sales-manage-item .name{flex:1;font-size:12px;font-weight:600;}
 .kota-tag{font-size:10px;background:#e8f4fd;color:var(--primary-light);padding:2px 8px;border-radius:10px;font-weight:600;}
@@ -243,6 +252,14 @@ tbody td{padding:8px 11px;vertical-align:top;}
 </style>
 </head>
 <body>
+
+<!-- SPLASH SCREEN -->
+<div id="splash">
+  <div class="splash-logo">AR DPM</div>
+  <div class="splash-sub">Account Receivable System</div>
+  <div class="splash-bar-track"><div class="splash-bar-fill" id="splash-bar"></div></div>
+  <div class="splash-pct" id="splash-pct">0%</div>
+</div>
 
 <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebarMobile()" title="Menu">☰</button>
 <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebarMobile()"></div>
@@ -2011,6 +2028,25 @@ async function init(){
   }
 }
 init();
+
+// SPLASH SCREEN: tampil tepat 3 detik, dengan progress bar 0-100% dan
+// angka persen yang ikut berjalan, lalu memudar dan menampilkan aplikasi.
+// Berjalan independen dari init() supaya loading data (yang bisa lebih
+// cepat atau lebih lambat dari 3 detik) tidak mempengaruhi durasi splash.
+(function initSplash(){
+  const splash=document.getElementById('splash');
+  const bar=document.getElementById('splash-bar');
+  const pct=document.getElementById('splash-pct');
+  if(!splash||!bar||!pct) return;
+  requestAnimationFrame(()=>{ bar.style.width='100%'; }); // trigger transisi CSS 3 detik
+  const duration=3000, start=Date.now();
+  const timer=setInterval(()=>{
+    const p=Math.min(100, Math.round((Date.now()-start)/duration*100));
+    pct.textContent=p+'%';
+    if(p>=100) clearInterval(timer);
+  }, 30);
+  setTimeout(()=>{ splash.classList.add('splash-hide'); }, duration);
+})();
 
 // PWA: daftarkan service worker supaya app bisa di-install & tetap bisa
 // dibuka walau tidak ada internet (khusus kalau hosting di GitHub Pages —
