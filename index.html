@@ -420,18 +420,12 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Customer</label><input type="text" id="m-customer" placeholder="Nama Customer"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="m-pic" placeholder="Nama PIC"></div>
         <div class="form-group full"><label>Alamat Customer</label><textarea id="m-alamat" placeholder="Alamat lengkap customer"></textarea></div>
-        <div class="form-group full"><label>Nama Barang</label><input type="text" id="m-barang" placeholder="Nama lengkap mesin"></div>
-        <div class="form-group"><label>QTY</label><input type="number" id="m-qty" value="1" min="1"></div>
-        <div class="form-group"><label>No. Seri</label><input type="text" id="m-seri" placeholder="No. Seri"></div>
-        <div class="form-group">
-          <label>Foto No. Seri <span style="color:var(--belum)">* wajib</span></label>
-          <div style="display:flex;align-items:center;gap:8px">
-            <label class="upload-bukti-btn" for="m-seri-file" id="m-seri-upload-label" title="Upload foto No. Seri">📎 Upload Foto</label>
-            <input type="file" id="m-seri-file" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="handleSeriUpload(this)">
-            <img id="m-seri-thumb" class="img-thumb" style="display:none" title="Klik perbesar">
-          </div>
-        </div>
-        <div class="form-group"><label>DPP (Rp)</label><input type="number" id="m-dpp" placeholder="0" oninput="calcMesinTotal()"></div>
+      </div>
+      <div class="section-divider">Daftar Barang <span style="color:var(--belum);font-weight:700">* minimal 1 barang, tiap barang wajib foto No. Seri</span></div>
+      <div id="m-item-list"></div>
+      <button class="btn btn-outline" style="margin-top:8px;font-size:11px" onclick="addItemRow('mesin')">+ Tambah Barang</button>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="form-group"><label>DPP (Rp) — Otomatis dari Daftar Barang</label><input type="number" id="m-dpp" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>PPN (Rp)</label><input type="number" id="m-ppn" placeholder="0" oninput="calcMesinTotal()"></div>
         <div class="form-group"><label>TOTAL (Rp)</label><input type="number" id="m-total" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>Status</label>
@@ -454,6 +448,15 @@ tbody td{padding:8px 11px;vertical-align:top;}
   </div>
 </div>
 
+<!-- MODAL: ITEM DETAIL (Rincian Barang) -->
+<div class="modal-overlay" id="modal-itemdetail">
+  <div class="modal modal-md">
+    <div class="modal-header"><h3>📦 Rincian Barang</h3><button class="modal-close" onclick="closeModal('modal-itemdetail')">×</button></div>
+    <div class="modal-body" id="itemdetail-body"></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-itemdetail')">Tutup</button></div>
+  </div>
+</div>
+
 <!-- MODAL: SPAREPARTS -->
 <div class="modal-overlay" id="modal-spare">
   <div class="modal">
@@ -468,12 +471,13 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Customer</label><input type="text" id="s-customer" placeholder="Nama Customer"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="s-pic" placeholder="Nama PIC"></div>
         <div class="form-group full"><label>Alamat Customer</label><textarea id="s-alamat" placeholder="Alamat lengkap customer"></textarea></div>
-        <div class="form-group full"><label>Nama Barang</label><input type="text" id="s-barang" placeholder="Nama lengkap sparepart/jasa"></div>
         <div class="form-group"><label>Jenis</label><select id="s-jenis"><option value="Sparepart">Sparepart</option><option value="Jasa">Jasa</option></select></div>
-        <div class="form-group"><label>QTY</label><input type="number" id="s-qty" value="1" min="1"></div>
-        <div class="form-group"><label>No. Seri</label><input type="text" id="s-seri" placeholder="-"></div>
-        <div class="form-group"><label>Harga per PC (Rp)</label><input type="number" id="s-harga" placeholder="0" oninput="calcSpareTotal()"></div>
-        <div class="form-group"><label>DPP (Rp)</label><input type="number" id="s-dpp" placeholder="0" oninput="calcSpareTotal()"></div>
+      </div>
+      <div class="section-divider">Daftar Barang <span style="color:var(--belum);font-weight:700">* minimal 1 barang</span></div>
+      <div id="s-item-list"></div>
+      <button class="btn btn-outline" style="margin-top:8px;font-size:11px" onclick="addItemRow('spare')">+ Tambah Barang</button>
+      <div class="form-grid" style="margin-top:16px">
+        <div class="form-group"><label>DPP (Rp) — Otomatis dari Daftar Barang</label><input type="number" id="s-dpp" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>PPN (Rp)</label><input type="number" id="s-ppn" placeholder="0" oninput="calcSpareTotal()"></div>
         <div class="form-group"><label>TOTAL (Rp)</label><input type="number" id="s-total" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>Status</label><select id="s-status"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select></div>
@@ -651,8 +655,7 @@ const DEFAULT_DB = {
 // STATE
 // ═══════════════════════════════════════════════════════
 let db = JSON.parse(JSON.stringify(DEFAULT_DB));
-let currentSalesId=null, currentTab='mesin', editingId=null, payRows=[];
-let seriImgData=null, seriHasExistingImg=false;
+let currentSalesId=null, currentTab='mesin', editingId=null, payRows=[], itemRows=[], currentItemPrefix='mesin';
 let mesinPage=1, sparePage=1, mesinSearchQ='', spareSearchQ='';
 const PAGE_SIZE=10;
 let currentPayPrefix='mesin'; // track which modal is open for pay rows
@@ -1206,7 +1209,7 @@ async function renderMesinTableBody(){
     html+=`<tr>
       <td>${(mesinPage-1)*PAGE_SIZE+i+1}</td><td>${fmtDate(r.tglPO)}</td>
       <td><b>${r.customer}</b></td><td>${r.pic}</td>
-      <td><b>${r.barang}</b><br><span class="text-sm">SN: ${r.seri||'-'} <span style="cursor:pointer" onclick="openLightbox('mesin_${r.id}_seri')" title="Lihat foto No. Seri">📷</span></span></td>
+      <td><b>${r.barang}</b><br><span class="text-sm" style="cursor:pointer;color:var(--primary-light)" onclick="showItemDetail('${r.id}','mesin')">🔎 Rincian (${(r.items&&r.items.length)||1} barang)</span></td>
       <td>${r.qty}</td>
       <td class="text-right currency">${fmt(r.dpp)}</td>
       <td class="text-right currency">${fmt(r.ppn)}</td>
@@ -1248,7 +1251,7 @@ async function renderSpareTableBody(){
   const pageRecords=filtered.slice((sparePage-1)*PAGE_SIZE, sparePage*PAGE_SIZE);
 
   let html=`<div class="table-scroll"><table id="table-spare">
-    <thead><tr><th>No</th><th>Tgl PO</th><th>No INV</th><th>Customer</th><th>PIC Handled</th><th>Nama Barang</th><th>Jenis</th><th>QTY</th><th>Harga/PC</th><th>TOTAL</th><th>History Pay</th><th>Status</th><th>A/R</th><th>Jadwal Pay</th><th>Aksi</th></tr></thead>
+    <thead><tr><th>No</th><th>Tgl PO</th><th>No INV</th><th>Customer</th><th>PIC Handled</th><th>Nama Barang</th><th>Jenis</th><th>QTY</th><th>Jml Barang</th><th>TOTAL</th><th>History Pay</th><th>Status</th><th>A/R</th><th>Jadwal Pay</th><th>Aksi</th></tr></thead>
     <tbody id="tbody-spare">`;
   for(const [i,r] of pageRecords.entries()){
     const chips=await renderPayChips(r.payments,r.id,'spare');
@@ -1256,10 +1259,10 @@ async function renderSpareTableBody(){
       <td>${(sparePage-1)*PAGE_SIZE+i+1}</td><td>${fmtDate(r.tglPO)}</td>
       <td><span class="text-sm">${r.noInv||'-'}</span></td>
       <td><b>${r.customer}</b></td><td>${r.picHandled}</td>
-      <td><b>${r.barang}</b><br><span class="text-sm">SN: ${r.seri||'-'}</span></td>
+      <td><b>${r.barang}</b><br><span class="text-sm" style="cursor:pointer;color:var(--primary-light)" onclick="showItemDetail('${r.id}','spare')">🔎 Rincian (${(r.items&&r.items.length)||1} barang)</span></td>
       <td><span class="status-badge" style="background:#f0f4ff;color:#3b6cd4">${r.jenis}</span></td>
       <td>${r.qty}</td>
-      <td class="text-right currency">${fmt(r.harga)}</td>
+      <td class="text-right">${(r.items&&r.items.length)||1} jenis</td>
       <td class="text-right currency"><b>${fmt(r.total)}</b></td>
       <td>${chips}</td>
       <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td>
@@ -1351,28 +1354,93 @@ async function handleBuktiUpload(idx,input,prefix){
 }
 
 // ═══════════════════════════════════════════════════════
-// FOTO NO. SERI (wajib, untuk verifikasi mesin)
+// DAFTAR BARANG (multi-item per transaksi) — Mesin & Spare/Jasa
+// Polanya sama seperti History Pembayaran: array baris yang bisa
+// ditambah/dihapus. Total DPP dihitung otomatis dari jumlah semua
+// (Qty × Harga) tiap barang.
 // ═══════════════════════════════════════════════════════
-function renderSeriImg(previewSrc){
-  const label=document.getElementById('m-seri-upload-label');
-  const thumb=document.getElementById('m-seri-thumb');
-  const hasImg=!!previewSrc;
-  if(label) label.textContent = hasImg ? '📷 Ganti Foto' : '📎 Upload Foto';
-  if(thumb){
-    if(hasImg){ thumb.src=previewSrc; thumb.style.display='inline-block'; thumb.onclick=()=>openLightboxSrc(previewSrc); }
-    else { thumb.style.display='none'; thumb.removeAttribute('src'); thumb.onclick=null; }
-  }
+function itemRowSubtotal_(it){ return (Number(it.qty)||0)*(Number(it.harga)||0); }
+function recalcItemsTotal_(prefix){
+  const sum=itemRows.reduce((a,it)=>a+itemRowSubtotal_(it),0);
+  const dppId=prefix==='mesin'?'m-dpp':'s-dpp';
+  document.getElementById(dppId).value=sum;
+  if(prefix==='mesin') calcMesinTotal(); else calcSpareTotal();
 }
-async function handleSeriUpload(input){
+function renderItemRows(prefix){
+  currentItemPrefix=prefix;
+  const el=document.getElementById(prefix==='mesin'?'m-item-list':'s-item-list'); if(!el) return;
+  const isMesin=prefix==='mesin';
+  let h=`<table class="pay-list"><thead><tr>
+    <th>Nama Barang</th><th>Qty</th><th>Harga/Unit (Rp)</th><th>Subtotal (Rp)</th><th>No. Seri</th>${isMesin?'<th>Foto No. Seri *</th>':''}<th></th>
+  </tr></thead><tbody>`;
+  itemRows.forEach((it,i)=>{
+    const hasImg=it._imgPreview||it._hasImg;
+    h+=`<tr id="itemrow-${i}">
+      <td><input type="text" value="${(it.barang||'').replace(/"/g,'&quot;')}" placeholder="Nama barang" oninput="itemRows[${i}].barang=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:160px"></td>
+      <td><input type="number" value="${it.qty||1}" min="1" oninput="itemRows[${i}].qty=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:60px"></td>
+      <td><input type="number" value="${it.harga||0}" oninput="itemRows[${i}].harga=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:100px"></td>
+      <td class="currency" id="item-subtotal-${i}">${fmt(itemRowSubtotal_(it))}</td>
+      <td><input type="text" value="${(it.seri||'').replace(/"/g,'&quot;')}" placeholder="-" oninput="itemRows[${i}].seri=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:90px"></td>
+      ${isMesin?`<td>
+        <label class="upload-bukti-btn ${hasImg?'has-file':''}" for="item-seri-file-${i}" title="${hasImg?'Foto tersimpan — klik untuk ganti':'Upload foto No. Seri'}">${hasImg?'📷 Ada':'📎 Upload'}</label>
+        <input type="file" id="item-seri-file-${i}" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="handleItemSeriUpload(${i},this,'${prefix}')">
+        ${it._imgPreview?`<img src="${it._imgPreview}" class="img-thumb" style="margin-left:4px" onclick="openLightboxSrc('${it._imgPreview}')" title="Klik perbesar">`:''}
+      </td>`:''}
+      <td><button onclick="removeItemRow(${i},'${prefix}')" style="background:#fdecea;border:none;color:#e74c3c;padding:3px 7px;border-radius:4px;cursor:pointer;font-size:11px">✕</button></td>
+    </tr>`;
+  });
+  if(!itemRows.length) h+=`<tr><td colspan="${isMesin?7:6}" style="text-align:center;padding:12px;color:#999;font-size:11px">Belum ada barang — klik "+ Tambah Barang"</td></tr>`;
+  h+=`</tbody></table>`;
+  el.innerHTML=h;
+  recalcItemsTotal_(prefix);
+}
+function updateItemSubtotalCell_(i,prefix){
+  const cell=document.getElementById(`item-subtotal-${i}`);
+  if(cell) cell.textContent=fmt(itemRowSubtotal_(itemRows[i]));
+  recalcItemsTotal_(prefix);
+}
+function addItemRow(prefix){
+  itemRows.push({barang:'',qty:1,harga:0,seri:'',_imgPreview:null,_imgData:null,_hasImg:false});
+  renderItemRows(prefix);
+}
+function removeItemRow(i,prefix){
+  itemRows.splice(i,1);
+  renderItemRows(prefix);
+}
+async function handleItemSeriUpload(idx,input,prefix){
   const file=input.files[0]; if(!file) return;
   if(file.size>5*1024*1024){toast('Ukuran file maksimal 5MB','error');return;}
   const reader=new FileReader();
   reader.onload=e=>{
-    seriImgData=e.target.result;
-    seriHasExistingImg=true;
-    renderSeriImg(seriImgData);
+    itemRows[idx]._imgPreview=e.target.result;
+    itemRows[idx]._imgData=e.target.result;
+    itemRows[idx]._hasImg=true;
+    renderItemRows(prefix);
   };
   reader.readAsDataURL(file);
+}
+
+// ═══════════════════════════════════════════════════════
+// RINCIAN BARANG (modal lihat detail — dipanggil dari tabel)
+// ═══════════════════════════════════════════════════════
+async function showItemDetail(id,type){
+  const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
+  if(!r) return;
+  const items=(r.items&&r.items.length)?r.items:[{barang:r.barang||'',qty:r.qty||1,harga:r.harga||0,seri:r.seri||''}];
+  let h=`<table class="pay-list"><thead><tr><th>No</th><th>Nama Barang</th><th>Qty</th><th>Harga/Unit</th><th>Subtotal</th><th>No. Seri</th>${type==='mesin'?'<th>Foto</th>':''}</tr></thead><tbody>`;
+  for(const [i,it] of items.entries()){
+    let fotoHtml='';
+    if(type==='mesin'){
+      const imgKey=`mesin_${id}_item_${i}_seri`;
+      let imgData=await loadImage(imgKey).catch(()=>null);
+      if(!imgData && i===0) imgData=await loadImage(`mesin_${id}_seri`).catch(()=>null); // fallback data lama
+      fotoHtml=`<td>${imgData?`<img src="${imgData}" class="img-thumb" onclick="openLightboxSrc('${imgData}')" title="Klik perbesar">`:'<span style="color:#ccc;font-size:10px">-</span>'}</td>`;
+    }
+    h+=`<tr><td>${i+1}</td><td>${it.barang||'-'}</td><td>${it.qty||0}</td><td class="currency">${fmt(it.harga||0)}</td><td class="currency">${fmt((Number(it.qty)||0)*(Number(it.harga)||0))}</td><td>${it.seri||'-'}</td>${fotoHtml}</tr>`;
+  }
+  h+=`</tbody></table>`;
+  document.getElementById('itemdetail-body').innerHTML=h;
+  openModal('modal-itemdetail');
 }
 
 // ═══════════════════════════════════════════════════════
@@ -1394,6 +1462,7 @@ function closeLightbox(){
 }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLightbox(); });
 
+
 // ═══════════════════════════════════════════════════════
 // MESIN CRUD
 // ═══════════════════════════════════════════════════════
@@ -1403,15 +1472,14 @@ function calcMesinTotal(){
   document.getElementById('m-total').value=d+p;
 }
 function openAddMesin(){
-  editingId=null;payRows=[];
-  seriImgData=null; seriHasExistingImg=false; renderSeriImg(null);
+  editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-mesin-title').textContent='Tambah Penjualan Mesin';
-  ['m-tgl-po','m-sales','m-customer','m-pic','m-alamat','m-barang','m-seri','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('m-qty').value=1;
+  ['m-tgl-po','m-sales','m-customer','m-pic','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
   ['m-dpp','m-ppn','m-total','m-ar'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-status').value='BELUM';
   const s=db.sales.find(x=>x.id===currentSalesId);
   if(s) document.getElementById('m-sales').value=s.nama;
+  addItemRow('mesin'); // mulai dengan 1 baris kosong biar langsung siap diisi
   renderPayRows('mesin'); openModal('modal-mesin');
 }
 async function editMesin(id){
@@ -1423,20 +1491,19 @@ async function editMesin(id){
     const imgData=await loadImage(imgKey).catch(()=>null);
     return{...p,_hasImg:!!imgData,_imgPreview:imgData||null};
   }));
-  seriImgData=null;
-  const existingSeriImg=await loadImage(`mesin_${id}_seri`).catch(()=>null);
-  seriHasExistingImg=!!existingSeriImg;
-  renderSeriImg(existingSeriImg);
+  // Migrasi data lama (sebelum fitur multi-barang) yang cuma punya 1 barang
+  const rawItems=(r.items&&r.items.length)?r.items:[{barang:r.barang||'',qty:r.qty||1,harga:r.harga||0,seri:r.seri||''}];
+  itemRows=await Promise.all(rawItems.map(async(it,i)=>{
+    let imgData=await loadImage(`mesin_${id}_item_${i}_seri`).catch(()=>null);
+    if(!imgData && i===0) imgData=await loadImage(`mesin_${id}_seri`).catch(()=>null); // fallback data lama
+    return{barang:it.barang||'',qty:it.qty||1,harga:it.harga||0,seri:it.seri||'',_hasImg:!!imgData,_imgPreview:imgData||null,_imgData:imgData||null};
+  }));
   document.getElementById('modal-mesin-title').textContent='Edit Penjualan Mesin';
   document.getElementById('m-tgl-po').value=r.tglPO||'';
   document.getElementById('m-sales').value=r.sales||'';
   document.getElementById('m-customer').value=r.customer||'';
   document.getElementById('m-pic').value=r.pic||'';
   document.getElementById('m-alamat').value=r.alamat||'';
-  document.getElementById('m-barang').value=r.barang||'';
-  document.getElementById('m-qty').value=r.qty||1;
-  document.getElementById('m-seri').value=r.seri||'';
-  document.getElementById('m-dpp').value=r.dpp||'';
   document.getElementById('m-ppn').value=r.ppn||'';
   document.getElementById('m-total').value=r.total||'';
   document.getElementById('m-status').value=r.status||'BELUM';
@@ -1445,14 +1512,19 @@ async function editMesin(id){
   document.getElementById('m-tgl-kirim').value=r.tglKirim||'';
   document.getElementById('m-tgl-setup').value=r.tglSetup||'';
   document.getElementById('m-ar').value=r.ar||'';
-  renderPayRows('mesin'); openModal('modal-mesin');
+  renderItemRows('mesin'); renderPayRows('mesin'); openModal('modal-mesin');
 }
 async function saveMesin(){
-  if(!seriImgData && !seriHasExistingImg){
-    toast('Foto No. Seri wajib diupload','error');
-    return;
+  if(!itemRows.length){ toast('Minimal isi 1 barang','error'); return; }
+  for(const[i,it] of itemRows.entries()){
+    if(!it.barang){ toast(`Nama barang pada baris ${i+1} belum diisi`,'error'); return; }
+    if(!it._imgData && !it._hasImg){ toast(`Foto No. Seri pada barang "${it.barang}" wajib diupload`,'error'); return; }
   }
-  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:document.getElementById('m-barang').value,qty:Number(document.getElementById('m-qty').value),seri:document.getElementById('m-seri').value,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
+  const cleanItems=itemRows.map(it=>({barang:it.barang,qty:Number(it.qty)||0,harga:Number(it.harga)||0,seri:it.seri||''}));
+  const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
+  const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
+  const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
+  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=payRows.map(p=>({tgl:p.tgl,jumlah:p.jumlah,rek:p.rek,ket:p.ket}));
   data.payments=cleanPay;
   const finalId=editingId||uid();
@@ -1462,14 +1534,19 @@ async function saveMesin(){
   for(const [i,p] of payRows.entries()){
     if(p._imgData) await saveImage(`mesin_${finalId}_pay_${i}`,p._imgData);
   }
-  if(seriImgData) await saveImage(`mesin_${finalId}_seri`,seriImgData);
+  for(const [i,it] of itemRows.entries()){
+    if(it._imgData) await saveImage(`mesin_${finalId}_item_${i}_seri`,it._imgData);
+  }
   await saveData();closeModal('modal-mesin');renderSidebar();renderMain();
   toast('Data mesin disimpan');
 }
 async function deleteMesin(id){
   if(!confirm('Hapus data ini?')) return;
+  const r=db.mesin.find(m=>m.id===id);
   db.mesin=db.mesin.filter(m=>m.id!==id);
   await deleteImage(`mesin_${id}_seri`).catch(()=>{});
+  const n=(r&&r.items)?r.items.length:1;
+  for(let i=0;i<n;i++){ await deleteImage(`mesin_${id}_item_${i}_seri`).catch(()=>{}); }
   await saveData();renderSidebar();renderMain();
   toast('Data dihapus','info');
 }
@@ -1483,15 +1560,15 @@ function calcSpareTotal(){
   document.getElementById('s-total').value=d+p;
 }
 function openAddSpare(){
-  editingId=null;payRows=[];
+  editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-spare-title').textContent='Tambah Penjualan Spareparts';
-  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-pic-handled','s-customer','s-pic','s-alamat','s-barang','s-seri','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('s-qty').value=1;
-  ['s-harga','s-dpp','s-ppn','s-total','s-ar'].forEach(id=>document.getElementById(id).value='');
+  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-pic-handled','s-customer','s-pic','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
+  ['s-dpp','s-ppn','s-total','s-ar'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s-status').value='BELUM';
   document.getElementById('s-jenis').value='Sparepart';
   const s=db.sales.find(x=>x.id===currentSalesId);
   if(s) document.getElementById('s-pic-handled').value=s.nama;
+  addItemRow('spare'); // mulai dengan 1 baris kosong
   renderPayRows('spare');openModal('modal-spare');
 }
 async function editSpare(id){
@@ -1502,6 +1579,9 @@ async function editSpare(id){
     const imgData=await loadImage(imgKey).catch(()=>null);
     return{...p,_hasImg:!!imgData,_imgPreview:imgData||null};
   }));
+  // Migrasi data lama (sebelum fitur multi-barang) yang cuma punya 1 barang
+  itemRows=((r.items&&r.items.length)?r.items:[{barang:r.barang||'',qty:r.qty||1,harga:r.harga||0,seri:r.seri||''}])
+    .map(it=>({barang:it.barang||'',qty:it.qty||1,harga:it.harga||0,seri:it.seri||''}));
   document.getElementById('modal-spare-title').textContent='Edit Spareparts';
   document.getElementById('s-tgl-po').value=r.tglPO||'';
   document.getElementById('s-no-po').value=r.noPO||'';
@@ -1511,12 +1591,7 @@ async function editSpare(id){
   document.getElementById('s-customer').value=r.customer||'';
   document.getElementById('s-pic').value=r.pic||'';
   document.getElementById('s-alamat').value=r.alamat||'';
-  document.getElementById('s-barang').value=r.barang||'';
   document.getElementById('s-jenis').value=r.jenis||'Sparepart';
-  document.getElementById('s-qty').value=r.qty||1;
-  document.getElementById('s-seri').value=r.seri||'';
-  document.getElementById('s-harga').value=r.harga||'';
-  document.getElementById('s-dpp').value=r.dpp||'';
   document.getElementById('s-ppn').value=r.ppn||'';
   document.getElementById('s-total').value=r.total||'';
   document.getElementById('s-status').value=r.status||'BELUM';
@@ -1525,10 +1600,19 @@ async function editSpare(id){
   document.getElementById('s-tgl-pasang').value=r.tglPasang||'';
   document.getElementById('s-ket').value=r.ket||'';
   document.getElementById('s-ar').value=r.ar||'';
-  renderPayRows('spare');openModal('modal-spare');
+  renderItemRows('spare'); renderPayRows('spare');openModal('modal-spare');
 }
 async function saveSpare(){
-  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:document.getElementById('s-barang').value,jenis:document.getElementById('s-jenis').value,qty:Number(document.getElementById('s-qty').value),seri:document.getElementById('s-seri').value,harga:Number(document.getElementById('s-harga').value)||0,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
+  if(!itemRows.length){ toast('Minimal isi 1 barang','error'); return; }
+  for(const[i,it] of itemRows.entries()){
+    if(!it.barang){ toast(`Nama barang pada baris ${i+1} belum diisi`,'error'); return; }
+  }
+  const cleanItems=itemRows.map(it=>({barang:it.barang,qty:Number(it.qty)||0,harga:Number(it.harga)||0,seri:it.seri||''}));
+  const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
+  const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
+  const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
+  const aggHarga=cleanItems.length?cleanItems[0].harga:0;
+  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=payRows.map(p=>({tgl:p.tgl,jumlah:p.jumlah,rek:p.rek,ket:p.ket}));
   data.payments=cleanPay;
   const finalId=editingId||uid();
@@ -1546,6 +1630,7 @@ async function deleteSpare(id){
   await saveData();renderSidebar();renderMain();
   toast('Data dihapus','info');
 }
+
 
 // ═══════════════════════════════════════════════════════
 // IMPORT DARI EXCEL (rekap lama)
