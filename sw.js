@@ -2,7 +2,7 @@
 // (HTML/manifest/ikon) supaya aplikasi tetap bisa dibuka walau tidak ada
 // internet. TIDAK menyimpan cache untuk data (itu tetap lewat Google Sheets
 // / Apps Script secara langsung, harus online untuk sinkron).
-const CACHE_NAME = 'ar-management-shell-v7';
+const CACHE_NAME = 'ar-management-shell-v8';
 const SHELL_FILES = ['./', './index.html', './manifest.json', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {

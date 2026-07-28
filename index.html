@@ -341,6 +341,14 @@ tbody td{padding:8px 11px;vertical-align:top;}
       <div class="form-grid">
         <div class="form-group full"><label>Nama Perusahaan / PT</label><input type="text" id="pt-nama" placeholder="Contoh: PT. Digital Prima Mandiri"></div>
         <div class="form-group full"><label>Alamat Perusahaan</label><textarea id="pt-alamat" placeholder="Alamat lengkap perusahaan..." style="min-height:70px"></textarea></div>
+        <div class="form-group"><label>Telp Perusahaan</label><input type="text" id="pt-telp" placeholder="021 xxxxxxx"></div>
+        <div class="form-group"><label>Email Perusahaan</label><input type="text" id="pt-email" placeholder="info@perusahaan.id"></div>
+        <div class="section-divider" style="grid-column:1/-1">Untuk Cetak Invoice</div>
+        <div class="form-group"><label>Nama Bank</label><input type="text" id="pt-bank-nama" placeholder="Contoh: Bank BCA"></div>
+        <div class="form-group"><label>No. Rekening</label><input type="text" id="pt-bank-norek" placeholder="No. Rekening"></div>
+        <div class="form-group full"><label>Atas Nama Rekening</label><input type="text" id="pt-bank-an" placeholder="Nama pemilik rekening"></div>
+        <div class="form-group"><label>Nama Penandatangan Invoice</label><input type="text" id="pt-ttd-nama" placeholder="Contoh: Ashley"></div>
+        <div class="form-group"><label>Jabatan Penandatangan</label><input type="text" id="pt-ttd-jabatan" placeholder="Contoh: Finance"></div>
       </div>
     </div>
     <div class="modal-footer">
@@ -436,6 +444,9 @@ tbody td{padding:8px 11px;vertical-align:top;}
     <div class="modal-body">
       <div class="form-grid">
         <div class="form-group"><label>Tanggal PO</label><input type="date" id="m-tgl-po"></div>
+        <div class="form-group"><label>No PO</label><input type="text" id="m-no-po" placeholder="No. PO dari customer"></div>
+        <div class="form-group"><label>No Invoice</label><input type="text" id="m-no-inv" placeholder="Contoh: 001/DPM/2026"></div>
+        <div class="form-group"><label>Tanggal Invoice</label><input type="date" id="m-tgl-inv"></div>
         <div class="form-group"><label>Sales</label><input type="text" id="m-sales" placeholder="Nama Sales"></div>
         <div class="form-group"><label>Customer</label><input type="text" id="m-customer" placeholder="Nama Customer"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="m-pic" placeholder="Nama PIC"></div>
@@ -850,11 +861,25 @@ function updatePTDisplay(){
 function openEditPT(){
   document.getElementById('pt-nama').value = db.ptInfo.nama||'';
   document.getElementById('pt-alamat').value = db.ptInfo.alamat||'';
+  document.getElementById('pt-telp').value = db.ptInfo.telp||'';
+  document.getElementById('pt-email').value = db.ptInfo.email||'';
+  document.getElementById('pt-bank-nama').value = db.ptInfo.bankNama||'';
+  document.getElementById('pt-bank-norek').value = db.ptInfo.bankNoRek||'';
+  document.getElementById('pt-bank-an').value = db.ptInfo.bankAtasNama||'';
+  document.getElementById('pt-ttd-nama').value = db.ptInfo.ttdNama||'';
+  document.getElementById('pt-ttd-jabatan').value = db.ptInfo.ttdJabatan||'';
   openModal('modal-pt');
 }
 function savePT(){
   db.ptInfo.nama = document.getElementById('pt-nama').value.trim()||'AR Management';
   db.ptInfo.alamat = document.getElementById('pt-alamat').value.trim();
+  db.ptInfo.telp = document.getElementById('pt-telp').value.trim();
+  db.ptInfo.email = document.getElementById('pt-email').value.trim();
+  db.ptInfo.bankNama = document.getElementById('pt-bank-nama').value.trim();
+  db.ptInfo.bankNoRek = document.getElementById('pt-bank-norek').value.trim();
+  db.ptInfo.bankAtasNama = document.getElementById('pt-bank-an').value.trim();
+  db.ptInfo.ttdNama = document.getElementById('pt-ttd-nama').value.trim();
+  db.ptInfo.ttdJabatan = document.getElementById('pt-ttd-jabatan').value.trim();
   saveData(); updatePTDisplay(); closeModal('modal-pt');
   toast('Info perusahaan diperbarui');
 }
@@ -1247,7 +1272,7 @@ async function renderMesinTableBody(){
       <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span>${r.tglLunas?`<br><span class="text-sm">${fmtDate(r.tglLunas)}</span>`:''}</td>
       <td class="text-right"><span class="ar-value">${fmt(r.ar)}</span></td>
       <td>${fmtDate(r.tglKirim)}</td>
-      <td style="white-space:nowrap"><button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editMesin('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteMesin('${r.id}')">🗑️</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','mesin')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editMesin('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteMesin('${r.id}')">🗑️</button></td>
     </tr>`;
   }
   if(!pageRecords.length) html+=`<tr><td colspan="14" class="no-data">${filtered.length===0 && all.length>0 ? 'Tidak ada data yang cocok dengan pencarian' : 'Belum ada data penjualan mesin'}</td></tr>`;
@@ -1297,7 +1322,7 @@ async function renderSpareTableBody(){
       <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td>
       <td class="text-right"><span class="ar-value">${fmt(r.ar)}</span></td>
       <td>${fmtDate(r.jadwalPay)}</td>
-      <td style="white-space:nowrap"><button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editSpare('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteSpare('${r.id}')">🗑️</button></td>
+      <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','spare')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editSpare('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteSpare('${r.id}')">🗑️</button></td>
     </tr>`;
   }
   if(!pageRecords.length) html+=`<tr><td colspan="15" class="no-data">${filtered.length===0 && all.length>0 ? 'Tidak ada data yang cocok dengan pencarian' : 'Belum ada data spareparts'}</td></tr>`;
@@ -1503,7 +1528,7 @@ function calcMesinTotal(){
 function openAddMesin(){
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-mesin-title').textContent='Tambah Penjualan Mesin';
-  ['m-tgl-po','m-sales','m-customer','m-pic','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
+  ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
   ['m-dpp','m-ppn','m-total','m-ar'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-status').value='BELUM';
   const s=db.sales.find(x=>x.id===currentSalesId);
@@ -1529,6 +1554,9 @@ async function editMesin(id){
   }));
   document.getElementById('modal-mesin-title').textContent='Edit Penjualan Mesin';
   document.getElementById('m-tgl-po').value=r.tglPO||'';
+  document.getElementById('m-no-po').value=r.noPO||'';
+  document.getElementById('m-no-inv').value=r.noInv||'';
+  document.getElementById('m-tgl-inv').value=r.tglInv||'';
   document.getElementById('m-sales').value=r.sales||'';
   document.getElementById('m-customer').value=r.customer||'';
   document.getElementById('m-pic').value=r.pic||'';
@@ -1553,7 +1581,7 @@ async function saveMesin(){
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
-  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=payRows.map(p=>({tgl:p.tgl,jumlah:p.jumlah,rek:p.rek,ket:p.ket}));
   data.payments=cleanPay;
   const finalId=editingId||uid();
@@ -2119,6 +2147,104 @@ function exportXLSX(){
   XLSX.utils.book_append_sheet(wb,buildSpare(),'⚙️ Spareparts');
   XLSX.writeFile(wb,`AR_${ptNama.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('Export Excel berhasil!');
+}
+
+// ═══════════════════════════════════════════════════════
+// CETAK INVOICE (per transaksi — Mesin & Spareparts/Jasa)
+// Layout mengikuti persis format "Format_Invoice.xlsx" yang dikasih:
+// From / Bill To di atas, tabel barang, Total Harga + PPN + Total
+// Pembayaran, info rekening, tanda tangan, footer alamat perusahaan.
+// ═══════════════════════════════════════════════════════
+function fmtTglInvoice_(iso){
+  if(!iso) return '-';
+  const d=new Date(iso); if(isNaN(d)) return '-';
+  const dd=String(d.getDate()).padStart(2,'0'), mm=String(d.getMonth()+1).padStart(2,'0'), yy=d.getFullYear();
+  return `${dd}/${mm}/${yy}`;
+}
+function printInvoice(id, type){
+  const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
+  if(!r){ toast('Data tidak ditemukan','error'); return; }
+  const items=(r.items&&r.items.length)?r.items:[{barang:r.barang||'',qty:r.qty||1,harga:r.harga||0}];
+  const pt=db.ptInfo||{};
+
+  const aoa=[];
+  for(let i=0;i<48;i++) aoa.push([]);
+  const set=(row,col,val)=>{ if(!aoa[row]) aoa[row]=[]; aoa[row][col]=val; };
+  const F=(row,col,formula)=>{ if(!aoa[row]) aoa[row]=[]; aoa[row][col]={f:formula}; };
+
+  // FROM / BILL TO
+  set(4,0,'From :'); set(4,4,'Bill To :');
+  set(5,0,pt.nama||'AR Management'); set(5,4,r.customer||'');
+  set(6,0,pt.alamat||''); set(6,4,r.alamat||'');
+  set(7,0,'Telp'); set(7,1,': '+(pt.telp||'-'));
+  set(9,0,'Email'); set(9,1,': '+(pt.email||'-'));
+  set(9,4,'Up.'); set(9,6,': '+(r.pic||'-'));
+
+  // INVOICE HEADER
+  set(13,0,'INVOICE');
+  set(15,0,'Invoice No'); set(15,2,' : '+(r.noInv||'-'));
+  set(15,5,'No PO'); set(15,6,': '+(r.noPO||'-'));
+  set(16,0,'Tanggal'); set(16,2,': '+fmtTglInvoice_(r.tglInv||r.tglPO));
+  set(16,5,'Tanggal PO'); set(16,6,': '+fmtTglInvoice_(r.tglPO));
+
+  // TABLE HEADER
+  set(18,0,'No'); set(18,1,'Description'); set(18,4,'QTY'); set(18,5,'Price / Unit'); set(18,7,'Curr'); set(18,8,'Total');
+
+  // ITEM ROWS (mulai baris 21, index 0-based -> row 21 = baris ke-22 di Excel)
+  const itemStartRow=21;
+  items.forEach((it,i)=>{
+    const row=itemStartRow+i;
+    set(row,0,i+1);
+    set(row,1,it.barang||'');
+    set(row,4,Number(it.qty)||0);
+    set(row,5,Number(it.harga)||0);
+    set(row,7,'IDR');
+    F(row,8,`F${row+1}*E${row+1}`);
+  });
+  const lastItemRow=itemStartRow+items.length-1;
+
+  // TOTAL SECTION (4 baris di bawah baris terakhir barang, meniru jarak di template)
+  const totalHargaRow=lastItemRow+4;
+  const ppnRow=totalHargaRow+1;
+  const totalBayarRow=ppnRow+2;
+  set(totalHargaRow,5,'Total Harga'); set(totalHargaRow,7,'IDR');
+  F(totalHargaRow,8,`SUM(I${itemStartRow+1}:I${lastItemRow+1})`);
+  set(ppnRow,5,'PPN'); set(ppnRow,7,'IDR');
+  F(ppnRow,8,`I${totalHargaRow+1}*11%`);
+  set(totalBayarRow,5,'Total Pembayaran'); set(totalBayarRow,7,'IDR');
+  F(totalBayarRow,8,`SUM(I${totalHargaRow+1}:I${ppnRow+1})`);
+
+  // BANK & TANDA TANGAN
+  const bankRow=totalBayarRow+2;
+  set(bankRow,0,'Pembayaran melalui rekening bank :');
+  set(bankRow,5,pt.nama||'AR Management');
+  set(bankRow+1,1,pt.bankNama||'-');
+  set(bankRow+2,1,'No. Rek. '+(pt.bankNoRek||'-'));
+  set(bankRow+3,1,pt.bankAtasNama||'-');
+  set(bankRow+6,5,pt.ttdNama||'-');
+  set(bankRow+7,5,pt.ttdJabatan||'-');
+
+  // FOOTER
+  const footerRow=bankRow+9;
+  set(footerRow,0,`${pt.nama||''} : ${pt.alamat||''}`);
+  set(footerRow+1,0,'');
+  set(footerRow+2,0,`Web : www.${(pt.email||'').split('@')[1]||'-'}             Info : ${pt.email||'-'}`);
+
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!merges']=[
+    {s:{r:13,c:0},e:{r:13,c:8}},
+    {s:{r:18,c:1},e:{r:18,c:3}},{s:{r:18,c:5},e:{r:18,c:6}},
+    {s:{r:bankRow+6,c:5},e:{r:bankRow+6,c:8}},{s:{r:bankRow+7,c:5},e:{r:bankRow+7,c:8}},
+    {s:{r:footerRow,c:0},e:{r:footerRow,c:8}},{s:{r:footerRow+2,c:0},e:{r:footerRow+2,c:8}}
+  ];
+  items.forEach((it,i)=>{ ws['!merges'].push({s:{r:itemStartRow+i,c:5},e:{r:itemStartRow+i,c:6}}); });
+  ws['!cols']=[{wch:5},{wch:8},{wch:15},{wch:26},{wch:6},{wch:12},{wch:7},{wch:7},{wch:15}];
+
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Invoice');
+  const fname=`Invoice_${(r.noInv||r.id).replace(/[^a-zA-Z0-9]/g,'_')}_${(r.customer||'').replace(/[^a-zA-Z0-9]/g,'_')}.xlsx`;
+  XLSX.writeFile(wb,fname);
+  toast('Invoice berhasil dicetak (terdownload)');
 }
 
 // Catatan: modal SENGAJA tidak ditutup saat klik di luar kotak (area gelap),
