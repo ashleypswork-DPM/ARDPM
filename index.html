@@ -237,6 +237,14 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .splash-bar-track{width:200px;max-width:60vw;height:6px;background:rgba(255,255,255,.22);border-radius:10px;overflow:hidden;margin-top:28px;}
 .splash-bar-fill{height:100%;width:0%;background:var(--accent);border-radius:10px;transition:width 3s linear;}
 .splash-pct{margin-top:10px;font-size:11px;font-weight:700;color:rgba(255,255,255,.85);letter-spacing:.5px;}
+
+/* APP GATE (layar login sebelum masuk dashboard) */
+#app-gate{position:fixed;inset:0;z-index:9500;background:linear-gradient(160deg,#0b3d91,var(--primary));display:none;align-items:center;justify-content:center;padding:20px;}
+#app-gate.gate-show{display:flex;}
+.gate-box{background:#fff;border-radius:14px;padding:28px 26px;width:100%;max-width:340px;box-shadow:0 20px 50px rgba(0,0,0,.3);}
+.gate-logo{font-size:26px;font-weight:800;color:var(--primary);text-align:center;letter-spacing:1px;}
+.gate-sub{font-size:12px;color:var(--text-light);text-align:center;margin-top:4px;margin-bottom:20px;}
+.gate-error{color:var(--belum);font-size:12px;margin-top:8px;min-height:16px;text-align:center;}
 .sales-manage-item{display:flex;align-items:center;gap:9px;padding:9px 12px;background:#f8f9fb;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
 .sales-manage-item .name{flex:1;font-size:12px;font-weight:600;}
 .kota-tag{font-size:10px;background:#e8f4fd;color:var(--primary-light);padding:2px 8px;border-radius:10px;font-weight:600;}
@@ -259,6 +267,18 @@ tbody td{padding:8px 11px;vertical-align:top;}
   <div class="splash-sub">Account Receivable System</div>
   <div class="splash-bar-track"><div class="splash-bar-fill" id="splash-bar"></div></div>
   <div class="splash-pct" id="splash-pct">0%</div>
+</div>
+
+<!-- APP GATE: layar login, wajib diisi benar sebelum data ditampilkan -->
+<div id="app-gate">
+  <div class="gate-box">
+    <div class="gate-logo">AR DPM</div>
+    <div class="gate-sub">Masuk untuk mengakses AR Management</div>
+    <div class="form-group"><label>ID</label><input type="text" id="gate-id" autocomplete="off" placeholder="ID"></div>
+    <div class="form-group"><label>Password</label><input type="password" id="gate-pass" autocomplete="off" placeholder="Password" onkeydown="if(event.key==='Enter')submitGateLogin()"></div>
+    <div class="gate-error" id="gate-error"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:6px" onclick="submitGateLogin()" id="gate-btn">Masuk</button>
+  </div>
 </div>
 
 <button class="hamburger-btn" id="hamburger-btn" onclick="toggleSidebarMobile()" title="Menu">☰</button>
@@ -668,6 +688,7 @@ let currentPayPrefix='mesin'; // track which modal is open for pay rows
 // ═══════════════════════════════════════════════════════
 const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwXmfw82P0mR9C4bpZxCG9nqzcMj6sDjIw_OFpIhtEKB3KGYNtSl13FKtcE2EtI5zQg/exec";
 let syncTimer = null;
+let appAuth = null; // {id,password} — cuma tersimpan di memori browser (RAM), hilang begitu tab ditutup/reload. Wajib login ulang tiap buka app dari awal.
 
 function setSyncStatus(text){
   const el = document.getElementById('sync-status');
@@ -675,11 +696,18 @@ function setSyncStatus(text){
 }
 
 // Ambil data terbaru dari Google Sheets. Return true jika berhasil & ada data.
+// Sekarang lewat POST (bukan GET) supaya kredensial ID/Password tidak ikut
+// ter-tulis di URL (browser history / server access log).
 async function pullFromSheets(){
   try{
     setSyncStatus('☁️ Sinkron dari Google Sheets...');
-    const res = await fetch(`${WEB_APP_URL}?action=getDB&_=${Date.now()}`, { cache:'no-store' });
+    const res = await fetch(WEB_APP_URL, {
+      method:'POST', cache:'no-store',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ action:'getDB', auth: appAuth })
+    });
     const result = await res.json();
+    if(result.code==='AUTH'){ forceReLogin_(); return false; }
     if(result.status === 'success' && result.data){
       const parsed = JSON.parse(result.data);
       db = { ...DEFAULT_DB, ...parsed };
@@ -712,9 +740,10 @@ async function pushToSheetsNow(silent){
     const res = await fetch(WEB_APP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ action: 'saveDB', payload: db })
+      body: JSON.stringify({ action: 'saveDB', auth: appAuth, payload: db })
     });
     const result = await res.json();
+    if(result.code==='AUTH'){ forceReLogin_(); return false; }
     if(result.status === 'success'){
       setSyncStatus('☁️ Tersimpan di Google Sheets');
       if(!silent) toast('Sinkron ke Google Sheets berhasil');
@@ -1647,6 +1676,7 @@ const IMPORT_SPARE_COL_ALIASES = {
   picHandled: ['pic handled'],
   customer: ['cust', 'customer'],
   pic: ['pic'],
+  alamat: ['alamat', 'alamat customer'],
   barang: ['nama barang'],
   jenis: ['jenis'],
   qty: ['qty'],
@@ -1767,6 +1797,7 @@ function handleImportFile(input){
           picHandled: cleanTxt_(getCell_(r,col.picHandled)),
           customer: cleanTxt_(getCell_(r,col.customer)),
           pic: cleanTxt_(getCell_(r,col.pic)),
+          alamat: cleanTxt_(getCell_(r,col.alamat)),
           barang: barang,
           jenis: cleanTxt_(getCell_(r,col.jenis))||'Sparepart',
           qty: numOf_(getCell_(r,col.qty))||1,
@@ -2095,9 +2126,46 @@ function exportXLSX(){
 // luar. Tutup modal hanya lewat tombol × atau "Batal".
 
 // ═══════════════════════════════════════════════════════
+// APP GATE (login wajib sebelum data ditampilkan/diakses)
+// ═══════════════════════════════════════════════════════
+function forceReLogin_(){
+  appAuth=null;
+  document.getElementById('app-gate').classList.add('gate-show');
+  document.getElementById('gate-error').textContent='Sesi berakhir, silakan login ulang';
+  toast('Sesi login berakhir, silakan masuk lagi','error');
+}
+async function submitGateLogin(){
+  const id=document.getElementById('gate-id').value.trim();
+  const pass=document.getElementById('gate-pass').value;
+  const errEl=document.getElementById('gate-error');
+  const btn=document.getElementById('gate-btn');
+  errEl.textContent='';
+  if(!id||!pass){ errEl.textContent='ID dan Password wajib diisi'; return; }
+  btn.disabled=true; btn.textContent='Memeriksa...';
+  try{
+    const res=await fetch(WEB_APP_URL,{
+      method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({action:'checkAuth',payload:{id,password:pass}})
+    });
+    const json=await res.json();
+    if(json.status==='success' && json.valid){
+      appAuth={id,password:pass};
+      document.getElementById('app-gate').classList.remove('gate-show');
+      document.getElementById('gate-pass').value='';
+      startApp();
+    } else {
+      errEl.textContent='ID atau Password salah';
+    }
+  }catch(e){
+    errEl.textContent='Gagal menghubungi server — cek koneksi internet';
+  }
+  btn.disabled=false; btn.textContent='Masuk';
+}
+
+// ═══════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════
-async function init(){
+async function startApp(){
   await openIDB();
   await loadData();          // tampilkan data lokal dulu (instan, tanpa nunggu internet)
   updatePTDisplay();
@@ -2112,12 +2180,18 @@ async function init(){
     updateDbInfo();
   }
 }
-init();
+
+// Tampilkan gerbang login setelah splash 3 detik selesai — startApp() baru
+// dipanggil setelah login berhasil (lihat submitGateLogin), bukan otomatis
+// saat halaman dibuka, supaya data tidak sempat kebaca sebelum login.
+function showGateAfterSplash_(){
+  document.getElementById('app-gate').classList.add('gate-show');
+}
 
 // SPLASH SCREEN: tampil tepat 3 detik, dengan progress bar 0-100% dan
-// angka persen yang ikut berjalan, lalu memudar dan menampilkan aplikasi.
-// Berjalan independen dari init() supaya loading data (yang bisa lebih
-// cepat atau lebih lambat dari 3 detik) tidak mempengaruhi durasi splash.
+// angka persen yang ikut berjalan, lalu memudar dan menampilkan gerbang
+// login. Berjalan independen dari proses lain supaya durasi splash tidak
+// terganggu cepat/lambatnya jaringan.
 (function initSplash(){
   const splash=document.getElementById('splash');
   const bar=document.getElementById('splash-bar');
@@ -2130,7 +2204,7 @@ init();
     pct.textContent=p+'%';
     if(p>=100) clearInterval(timer);
   }, 30);
-  setTimeout(()=>{ splash.classList.add('splash-hide'); }, duration);
+  setTimeout(()=>{ splash.classList.add('splash-hide'); showGateAfterSplash_(); }, duration);
 })();
 
 // PWA: daftarkan service worker supaya app bisa di-install & tetap bisa
