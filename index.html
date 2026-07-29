@@ -10,7 +10,7 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
 :root{
   --primary:#1a3a5c;--primary-light:#2563a8;--accent:#e8a020;--accent2:#27ae60;
@@ -2151,9 +2151,13 @@ function exportXLSX(){
 
 // ═══════════════════════════════════════════════════════
 // CETAK INVOICE (per transaksi — Mesin & Spareparts/Jasa)
-// Layout mengikuti persis format "Format_Invoice.xlsx" yang dikasih:
-// From / Bill To di atas, tabel barang, Total Harga + PPN + Total
-// Pembayaran, info rekening, tanda tangan, footer alamat perusahaan.
+// Layout & styling mengikuti persis contoh "contoh_format_invoice.pdf":
+// From / Bill To di atas, judul INVOICE besar di tengah, tabel barang
+// dengan border, Total Harga + PPN + Total Pembayaran, info rekening,
+// tanda tangan, footer alamat perusahaan (italic, abu-abu).
+// Pakai xlsx-js-style (bukan SheetJS versi gratis biasa) supaya bold,
+// border, dan perataan benar-benar tersimpan di file .xlsx — SheetJS
+// versi gratis/CE tidak bisa menyimpan styling sama sekali saat nulis file.
 // ═══════════════════════════════════════════════════════
 function fmtTglInvoice_(iso){
   if(!iso) return '-';
@@ -2166,79 +2170,121 @@ function printInvoice(id, type){
   if(!r){ toast('Data tidak ditemukan','error'); return; }
   const items=(r.items&&r.items.length)?r.items:[{barang:r.barang||'',qty:r.qty||1,harga:r.harga||0}];
   const pt=db.ptInfo||{};
+  const FONT='Arial';
+  const border=(w='thin')=>({top:{style:w},bottom:{style:w},left:{style:w},right:{style:w}});
+  const styles={
+    label:{font:{name:FONT,sz:10,bold:true}},
+    val:{font:{name:FONT,sz:10}},
+    bold:{font:{name:FONT,sz:10,bold:true}},
+    title:{font:{name:FONT,sz:22,bold:true},alignment:{horizontal:'center',vertical:'center'}},
+    thHead:{font:{name:FONT,sz:10,bold:true},alignment:{horizontal:'center',vertical:'center'},border:border(),fill:{fgColor:{rgb:'F2F2F2'}}},
+    cellC:{font:{name:FONT,sz:10},alignment:{horizontal:'center',vertical:'center'},border:border()},
+    cellL:{font:{name:FONT,sz:10},alignment:{horizontal:'left',vertical:'center',wrapText:true},border:border()},
+    cellR:{font:{name:FONT,sz:10},alignment:{horizontal:'right',vertical:'center'},border:border(),numFmt:'#,##0'},
+    totalLabel:{font:{name:FONT,sz:10,bold:true},border:border()},
+    totalCurr:{font:{name:FONT,sz:10,bold:true},alignment:{horizontal:'center'},border:border()},
+    totalVal:{font:{name:FONT,sz:10,bold:true},alignment:{horizontal:'right'},border:border(),numFmt:'#,##0'},
+    sig:{font:{name:FONT,sz:10,bold:true,underline:true}},
+    footer:{font:{name:FONT,sz:8,italic:true,color:{rgb:'666666'}},alignment:{horizontal:'center'}}
+  };
 
-  const aoa=[];
-  for(let i=0;i<48;i++) aoa.push([]);
-  const set=(row,col,val)=>{ if(!aoa[row]) aoa[row]=[]; aoa[row][col]=val; };
-  const F=(row,col,formula)=>{ if(!aoa[row]) aoa[row]=[]; aoa[row][col]={f:formula}; };
+  const aoa=[]; for(let i=0;i<48;i++) aoa.push([]);
+  const cellStyles={}; // "r_c" -> style object
+  const set=(row,col,val,style)=>{
+    if(!aoa[row]) aoa[row]=[];
+    aoa[row][col]=val;
+    if(style) cellStyles[`${row}_${col}`]=style;
+  };
+  const F=(row,col,formula,style)=>{
+    if(!aoa[row]) aoa[row]=[];
+    aoa[row][col]={f:formula};
+    if(style) cellStyles[`${row}_${col}`]=style;
+  };
 
   // FROM / BILL TO
-  set(4,0,'From :'); set(4,4,'Bill To :');
-  set(5,0,pt.nama||'AR Management'); set(5,4,r.customer||'');
-  set(6,0,pt.alamat||''); set(6,4,r.alamat||'');
-  set(7,0,'Telp'); set(7,1,': '+(pt.telp||'-'));
-  set(9,0,'Email'); set(9,1,': '+(pt.email||'-'));
-  set(9,4,'Up.'); set(9,6,': '+(r.pic||'-'));
+  set(4,0,'From :',styles.bold); set(4,4,'Bill To :',styles.bold);
+  set(5,0,pt.nama||'AR Management',styles.bold); set(5,4,r.customer||'-',styles.bold);
+  set(6,0,pt.alamat||'-',styles.val); set(6,4,r.alamat||'-',styles.val);
+  set(7,0,'Telp',styles.val); set(7,1,': '+(pt.telp||'-'),styles.val);
+  set(9,0,'Email',styles.val); set(9,1,': '+(pt.email||'-'),styles.val);
+  set(9,4,'Up.',styles.val); set(9,6,': '+(r.pic||'-'),styles.val);
 
   // INVOICE HEADER
-  set(13,0,'INVOICE');
-  set(15,0,'Invoice No'); set(15,2,' : '+(r.noInv||'-'));
-  set(15,5,'No PO'); set(15,6,': '+(r.noPO||'-'));
-  set(16,0,'Tanggal'); set(16,2,': '+fmtTglInvoice_(r.tglInv||r.tglPO));
-  set(16,5,'Tanggal PO'); set(16,6,': '+fmtTglInvoice_(r.tglPO));
+  set(13,0,'INVOICE',styles.title);
+  set(15,0,'Invoice No',styles.val); set(15,2,' : '+(r.noInv||'-'),styles.val);
+  set(15,5,'No PO',styles.val); set(15,6,': '+(r.noPO||'-'),styles.val);
+  set(16,0,'Tanggal',styles.val); set(16,2,': '+fmtTglInvoice_(r.tglInv||r.tglPO),styles.val);
+  set(16,5,'Tanggal PO',styles.val); set(16,6,': '+fmtTglInvoice_(r.tglPO),styles.val);
 
   // TABLE HEADER
-  set(18,0,'No'); set(18,1,'Description'); set(18,4,'QTY'); set(18,5,'Price / Unit'); set(18,7,'Curr'); set(18,8,'Total');
+  set(18,0,'No',styles.thHead); set(18,1,'Description',styles.thHead);
+  set(18,4,'QTY',styles.thHead); set(18,5,'Price / Unit',styles.thHead);
+  set(18,7,'Curr',styles.thHead); set(18,8,'Total',styles.thHead);
+  // kolom B-D & F-G digabung (merge), sel-sel yang ikut merge tetap perlu style border/fill sendiri
+  set(18,2,'',styles.thHead); set(18,3,'',styles.thHead); set(18,6,'',styles.thHead);
 
-  // ITEM ROWS (mulai baris 21, index 0-based -> row 21 = baris ke-22 di Excel)
+  // ITEM ROWS
   const itemStartRow=21;
   items.forEach((it,i)=>{
     const row=itemStartRow+i;
-    set(row,0,i+1);
-    set(row,1,it.barang||'');
-    set(row,4,Number(it.qty)||0);
-    set(row,5,Number(it.harga)||0);
-    set(row,7,'IDR');
-    F(row,8,`F${row+1}*E${row+1}`);
+    set(row,0,i+1,styles.cellC);
+    set(row,1,it.barang||'-',styles.cellL);
+    set(row,2,'',styles.cellL); set(row,3,'',styles.cellL); // ikut merge Description
+    set(row,4,Number(it.qty)||0,styles.cellC);
+    set(row,5,Number(it.harga)||0,styles.cellR);
+    set(row,6,'',styles.cellR); // ikut merge Price/Unit
+    set(row,7,'IDR',styles.cellC);
+    F(row,8,`F${row+1}*E${row+1}`,styles.cellR);
   });
   const lastItemRow=itemStartRow+items.length-1;
 
-  // TOTAL SECTION (4 baris di bawah baris terakhir barang, meniru jarak di template)
+  // TOTAL SECTION
   const totalHargaRow=lastItemRow+4;
   const ppnRow=totalHargaRow+1;
   const totalBayarRow=ppnRow+2;
-  set(totalHargaRow,5,'Total Harga'); set(totalHargaRow,7,'IDR');
-  F(totalHargaRow,8,`SUM(I${itemStartRow+1}:I${lastItemRow+1})`);
-  set(ppnRow,5,'PPN'); set(ppnRow,7,'IDR');
-  F(ppnRow,8,`I${totalHargaRow+1}*11%`);
-  set(totalBayarRow,5,'Total Pembayaran'); set(totalBayarRow,7,'IDR');
-  F(totalBayarRow,8,`SUM(I${totalHargaRow+1}:I${ppnRow+1})`);
+  set(totalHargaRow,5,'Total Harga',styles.totalLabel); set(totalHargaRow,7,'IDR',styles.totalCurr);
+  F(totalHargaRow,8,`SUM(I${itemStartRow+1}:I${lastItemRow+1})`,styles.totalVal);
+  set(ppnRow,5,'PPN',styles.totalLabel); set(ppnRow,7,'IDR',styles.totalCurr);
+  F(ppnRow,8,`I${totalHargaRow+1}*11%`,styles.totalVal);
+  set(totalBayarRow,5,'Total Pembayaran',styles.totalLabel); set(totalBayarRow,7,'IDR',styles.totalCurr);
+  F(totalBayarRow,8,`SUM(I${totalHargaRow+1}:I${ppnRow+1})`,styles.totalVal);
 
   // BANK & TANDA TANGAN
   const bankRow=totalBayarRow+2;
-  set(bankRow,0,'Pembayaran melalui rekening bank :');
-  set(bankRow,5,pt.nama||'AR Management');
-  set(bankRow+1,1,pt.bankNama||'-');
-  set(bankRow+2,1,'No. Rek. '+(pt.bankNoRek||'-'));
-  set(bankRow+3,1,pt.bankAtasNama||'-');
-  set(bankRow+6,5,pt.ttdNama||'-');
-  set(bankRow+7,5,pt.ttdJabatan||'-');
+  set(bankRow,0,'Pembayaran melalui rekening bank :',styles.val);
+  set(bankRow,5,pt.nama||'AR Management',styles.bold);
+  set(bankRow+1,1,pt.bankNama||'-',styles.bold);
+  set(bankRow+2,1,'No. Rek. '+(pt.bankNoRek||'-'),styles.bold);
+  set(bankRow+3,1,pt.bankAtasNama||'-',styles.bold);
+  set(bankRow+6,5,pt.ttdNama||'-',styles.sig);
+  set(bankRow+7,5,pt.ttdJabatan||'-',styles.val);
 
   // FOOTER
   const footerRow=bankRow+9;
-  set(footerRow,0,`${pt.nama||''} : ${pt.alamat||''}`);
-  set(footerRow+1,0,'');
-  set(footerRow+2,0,`Web : www.${(pt.email||'').split('@')[1]||'-'}             Info : ${pt.email||'-'}`);
+  set(footerRow,0,`${pt.nama||''} : ${pt.alamat||'-'}`,styles.footer);
+  set(footerRow+2,0,`Web : www.${(pt.email||'').split('@')[1]||'-'}             Info : ${pt.email||'-'}`,styles.footer);
 
   const ws=XLSX.utils.aoa_to_sheet(aoa);
+  // Terapkan style ke tiap sel yang sudah didaftarkan
+  Object.keys(cellStyles).forEach(key=>{
+    const [rr,cc]=key.split('_').map(Number);
+    const addr=XLSX.utils.encode_cell({r:rr,c:cc});
+    if(!ws[addr]) ws[addr]={t:'s',v:''};
+    ws[addr].s=cellStyles[key];
+  });
+
   ws['!merges']=[
     {s:{r:13,c:0},e:{r:13,c:8}},
     {s:{r:18,c:1},e:{r:18,c:3}},{s:{r:18,c:5},e:{r:18,c:6}},
     {s:{r:bankRow+6,c:5},e:{r:bankRow+6,c:8}},{s:{r:bankRow+7,c:5},e:{r:bankRow+7,c:8}},
     {s:{r:footerRow,c:0},e:{r:footerRow,c:8}},{s:{r:footerRow+2,c:0},e:{r:footerRow+2,c:8}}
   ];
-  items.forEach((it,i)=>{ ws['!merges'].push({s:{r:itemStartRow+i,c:5},e:{r:itemStartRow+i,c:6}}); });
+  items.forEach((it,i)=>{
+    ws['!merges'].push({s:{r:itemStartRow+i,c:1},e:{r:itemStartRow+i,c:3}});
+    ws['!merges'].push({s:{r:itemStartRow+i,c:5},e:{r:itemStartRow+i,c:6}});
+  });
   ws['!cols']=[{wch:5},{wch:8},{wch:15},{wch:26},{wch:6},{wch:12},{wch:7},{wch:7},{wch:15}];
+  ws['!rows']=[]; ws['!rows'][13]={hpt:28};
 
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Invoice');
