@@ -413,6 +413,20 @@ tbody td{padding:8px 11px;vertical-align:top;}
 </div>
 
 <!-- MODAL: VERIFIKASI (ID/Password untuk aksi sensitif) -->
+<!-- PILIH JENIS PEMBAYARAN PERTAMA: DP atau Pembayaran 1 -->
+<div class="modal-overlay" id="modal-paytype" style="z-index:1100">
+  <div class="modal" style="max-width:340px">
+    <div class="modal-header"><h3>💳 Jenis Pembayaran Pertama</h3><button class="modal-close" onclick="closeModal('modal-paytype')">×</button></div>
+    <div class="modal-body">
+      <p style="font-size:12px;color:#888;margin-bottom:12px">Baris pertama ini dicatat sebagai apa?</p>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" style="flex:1;justify-content:center" onclick="choosePayType('dp')">DP</button>
+        <button class="btn btn-outline" style="flex:1;justify-content:center" onclick="choosePayType('p1')">Pembayaran 1</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="modal-auth">
   <div class="modal modal-sm">
     <div class="modal-header"><h3>🔒 Verifikasi Diperlukan</h3><button class="modal-close" onclick="closeModal('modal-auth')">×</button></div>
@@ -749,9 +763,13 @@ async function pullFromSheets(){
 // LABEL PEMBAYARAN: setiap baris history pembayaran diberi label urut
 // "Pembayaran 1", "Pembayaran 2", dst. Label ditaruh paling depan supaya
 // kolom PaymentsJSON di Google Sheets enak dibaca.
-function payLabel_(i){ return 'Pembayaran '+(i+1); }
+// Kalau baris pertama dipilih sebagai DP, labelnya "DP" lalu baris berikutnya
+// "Pembayaran 1", "Pembayaran 2", dst. Tanpa DP: langsung "Pembayaran 1", dst.
+function payHasDP_(list){ return !!(list&&list[0]&&list[0].label==='DP'); }
+function payLabel_(i,hasDP){ return hasDP ? (i===0?'DP':'Pembayaran '+i) : 'Pembayaran '+(i+1); }
 function labelPayments_(list){
-  return (list||[]).map((p,i)=>({label:payLabel_(i),tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||''}));
+  const dp=payHasDP_(list);
+  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||''}));
 }
 function labelAllPayments_(){
   [db.mesin,db.spare].forEach(arr=>(arr||[]).forEach(r=>{ r.payments=labelPayments_(r.payments); }));
@@ -1364,7 +1382,7 @@ async function showPayDetail(id,type){
       const buktiHtml=imgData
         ?`<img src="${imgData}" class="img-thumb" onclick="openLightbox('${imgKey}')" title="Klik untuk perbesar">`
         :`<span style="color:#ccc;font-size:10px">-</span>`;
-      h+=`<tr><td class="pay-label">${payLabel_(i)}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td>${buktiHtml}</td></tr>`;
+      h+=`<tr><td class="pay-label">${payLabel_(i,payHasDP_(r.payments))}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td>${buktiHtml}</td></tr>`;
     }
   } else h+=`<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Belum ada history</td></tr>`;
   h+=`</tbody></table>`;
@@ -1385,7 +1403,7 @@ function renderPayRows(prefix){
   payRows.forEach((p,i)=>{
     const hasImg=p._imgPreview||p._hasImg;
     h+=`<tr id="payrow-${i}">
-      <td class="pay-label">${payLabel_(i)}</td>
+      <td class="pay-label">${payLabel_(i,payHasDP_(payRows))}</td>
       <td><input type="date" value="${p.tgl||''}" onchange="payRows[${i}].tgl=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:120px"></td>
       <td><input type="number" value="${p.jumlah||''}" onchange="payRows[${i}].jumlah=Number(this.value)" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
       <td><input type="text" value="${p.rek||''}" onchange="payRows[${i}].rek=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:100px"></td>
@@ -1407,9 +1425,18 @@ function removePayRow(i,prefix){
   payRows.splice(i,1);
   renderPayRows(prefix);
 }
+let pendingPayPrefix=null;
 function addPayRow(prefix){
+  // Baris pertama: tanya dulu, ini DP atau langsung Pembayaran 1.
+  if(!payRows.length){ pendingPayPrefix=prefix; openModal('modal-paytype'); return; }
   payRows.push({tgl:'',jumlah:0,rek:'',ket:'',_imgPreview:null,_hasImg:false});
   renderPayRows(prefix);
+}
+function choosePayType(type){
+  closeModal('modal-paytype');
+  if(!pendingPayPrefix) return;
+  payRows.push({label:type==='dp'?'DP':'Pembayaran 1',tgl:'',jumlah:0,rek:'',ket:'',_imgPreview:null,_hasImg:false});
+  renderPayRows(pendingPayPrefix); pendingPayPrefix=null;
 }
 async function handleBuktiUpload(idx,input,prefix){
   const file=input.files[0]; if(!file) return;
