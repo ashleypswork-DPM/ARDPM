@@ -159,6 +159,10 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .pay-list input{border:1px solid #dde3ec;padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--font);outline:none;}
 .pay-list input:focus{border-color:var(--primary-light);}
 .pay-list td.pay-label{font-weight:700;color:var(--primary);white-space:nowrap;}
+.inv-pick-btn{display:flex;width:100%;align-items:center;justify-content:space-between;gap:12px;text-align:left;background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:7px;cursor:pointer;font-family:inherit;font-size:12px;color:var(--text);transition:.15s;}
+.inv-pick-btn:hover{border-color:var(--primary-light);background:#f3f8fd;}
+.inv-pick-btn small{display:block;color:var(--text-light);font-size:11px;margin-top:2px;}
+.inv-pick-btn .inv-pick-amt{font-weight:700;color:var(--primary);white-space:nowrap;}
 /* Form Mesin/Spare dilebarkan supaya tabel History Pembayaran (dengan kolom No Invoice) muat */
 #modal-mesin .modal,#modal-spare .modal{max-width:900px;}
 #m-pay-list,#s-pay-list{overflow-x:auto;}
@@ -417,6 +421,17 @@ tbody td{padding:8px 11px;vertical-align:top;}
 </div>
 
 <!-- MODAL: VERIFIKASI (ID/Password untuk aksi sensitif) -->
+<!-- PILIH INVOICE YANG MAU DICETAK: induk atau per pembayaran -->
+<div class="modal-overlay" id="modal-invpick" style="z-index:1100">
+  <div class="modal modal-sm">
+    <div class="modal-header"><h3>🖨️ Cetak Invoice yang Mana?</h3><button class="modal-close" onclick="closeModal('modal-invpick')">×</button></div>
+    <div class="modal-body">
+      <p id="invpick-sub" style="font-size:12px;color:#888;margin-bottom:12px"></p>
+      <div id="invpick-list"></div>
+    </div>
+  </div>
+</div>
+
 <!-- PILIH JENIS PEMBAYARAN PERTAMA: DP atau Pembayaran 1 -->
 <div class="modal-overlay" id="modal-paytype" style="z-index:1100">
   <div class="modal" style="max-width:340px">
@@ -2241,7 +2256,27 @@ function invFill_(tpl,map){
   Object.keys(map).forEach(k=>{ out=out.split('@@'+k+'@@').join(map[k]); });
   return out;
 }
+// Klik "Cetak Invoice": kalau transaksi punya History Pembayaran, tampilkan
+// pilihan dulu (invoice induk, atau invoice untuk pembayaran tertentu).
 function printInvoice(id, type){
+  const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
+  if(!r){ toast('Data tidak ditemukan','error'); return; }
+  const pays=r.payments||[];
+  if(!pays.length){ buildInvoiceDoc_(id,type,null); return; }
+  const hasDP=payHasDP_(pays);
+  const btn=(idx,judul,noInv,kanan)=>`<button class="inv-pick-btn" onclick="closeModal('modal-invpick');buildInvoiceDoc_('${id}','${type}',${idx})">
+      <span><b>${judul}</b><small>No Invoice: ${escAttr_(noInv)||'-'}</small></span><span class="inv-pick-amt">${kanan}</span></button>`;
+  let h=btn('null','Invoice Induk',r.noInv,'Rp '+invNum_(r.total));
+  pays.forEach((p,i)=>{ h+=btn(i,payLabel_(i,hasDP),p.noInv,'Rp '+invNum_(p.jumlah)); });
+  document.getElementById('invpick-sub').textContent=(r.customer||'-')+' — '+(r.barang||'-');
+  document.getElementById('invpick-list').innerHTML=h;
+  openModal('modal-invpick');
+}
+// payIdx=null -> invoice induk. payIdx=angka -> invoice untuk pembayaran itu:
+// No Invoice & tanggal dari baris pembayaran, tanpa Note harga, Total Harga =
+// Total induk, rincian pembayaran sampai pembayaran yang dipilih, dan Total
+// Pembayaran = jumlah pembayaran yang dipilih.
+function buildInvoiceDoc_(id, type, payIdx){
   const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
   if(!r){ toast('Data tidak ditemukan','error'); return; }
   if(typeof XLSX==='undefined' || !XLSX.CFB){ toast('Gagal membuat invoice: komponen belum termuat, cek koneksi internet','error'); return; }
@@ -2256,6 +2291,8 @@ function printInvoice(id, type){
     const total=Number(r.total)||(totalHarga+ppn);
     const pays=r.payments||[];
     const hasDP=payHasDP_(pays);
+    const perPay=(payIdx!==null && payIdx!==undefined && !!pays[payIdx]);
+    const sel=perPay?pays[payIdx]:null;
 
     const zip=XLSX.CFB.read(INVOICE_TPL_B64,{type:'base64'});
     // Pustaka zip-nya menaruh semua isi di bawah "Root Entry/"
@@ -2278,20 +2315,25 @@ function printInvoice(id, type){
       rowsXml+=invFill_(T.ITEM,{NO:String(i+1),BARANG:invText_(it.barang||'-'),QTY:invNum_(qty),HARGA:'Rp '+invNum_(harga),SUB:'Rp   '+invNum_(qty*harga)});
     });
     // Note: harga (Total) sudah / belum termasuk PPN
-    rowsXml+=invFill_(T.MID,{
-      NOTE1:`Harga ${type==='mesin'?'mesin ':''}Rp. ${invNum_(total)},00`,
-      NOTE2: ppn>0 ? 'sudah termasuk PPN' : 'belum termasuk PPN'
+    // (invoice per pembayaran: bagian Note dikosongkan)
+    rowsXml+=invFill_(perPay?T.MID.split('>Note :<').join('><'):T.MID,{
+      NOTE1: perPay ? '' : `Harga ${type==='mesin'?'mesin ':''}Rp. ${invNum_(total)},00`,
+      NOTE2: perPay ? '' : (ppn>0 ? 'sudah termasuk PPN' : 'belum termasuk PPN')
     });
     // Rincian: Discount, Total Harga, DP / PAY ..., PPN
     const sums=[];
     sums.push({label:'Discount',txt:discount>0?invNum_(discount):'-',bold:false});
-    sums.push({label:'Total Harga',txt:invNum_(totalHarga),bold:false});
+    // Invoice per pembayaran: Total Harga = Total induk; pembayaran ditulis
+    // "Pembayaran I, II, ..." sampai yang dipilih (yang dipilih dicetak tebal).
+    sums.push({label:'Total Harga',txt:invNum_(perPay?total:totalHarga),bold:false});
+    const lastIdx=perPay?payIdx:pays.length-1;
     pays.forEach((p,i)=>{
-      const label=(hasDP&&i===0)?'DP':'PAY '+invRoman_(hasDP?i:i+1);
-      sums.push({label,txt:invNum_(p.jumlah),bold:i===pays.length-1});
+      if(i>lastIdx) return;
+      const label=(hasDP&&i===0)?'DP':(perPay?'Pembayaran ':'PAY ')+invRoman_(hasDP?i:i+1);
+      sums.push({label,txt:invNum_(p.jumlah),bold:i===lastIdx});
     });
     sums.push({label:'PPN',txt:ppn>0?invNum_(ppn):'-',bold:true});
-    const totalTxt=invNum_(total);
+    const totalTxt=invNum_(perPay?sel.jumlah:total);
     const unit=t=>{ let w=0; for(const ch of t) w+=(ch>='0'&&ch<='9')?2:1; return w; };
     const maxW=Math.max(unit(totalTxt),...sums.map(s=>unit(s.txt)));
     const wN=Math.max(26,maxW+3), wB=Math.max(23,maxW+2);
@@ -2306,8 +2348,8 @@ function printInvoice(id, type){
       ALAMAT:invText_(r.alamat||'-'),
       PIC:invText_(r.pic||'-'),
       NPWP:'-',
-      NOINV:invText_(r.noInv||'-'),
-      TGL:fmtTglInvoice_(r.tglInv||r.tglPO),
+      NOINV:invText_((perPay?sel.noInv:r.noInv)||'-'),
+      TGL:fmtTglInvoice_(perPay?(sel.tgl||r.tglInv||r.tglPO):(r.tglInv||r.tglPO)),
       BANK:invText_(pt.bankNama||'Bank BCA'),
       NOREK:invText_(pt.bankNoRek||'-'),
       ATASNAMA:invText_(pt.bankAtasNama||''),
@@ -2321,7 +2363,8 @@ function printInvoice(id, type){
     zip.FullPaths.slice().forEach(fp=>{ if(fp.indexOf('Sh33tJ5')>-1) XLSX.CFB.utils.cfb_del(zip,fp); });
     const out=XLSX.CFB.write(zip,{fileType:'zip',type:'array',compression:true});
     const blob=new Blob([out instanceof Uint8Array?out:new Uint8Array(out)],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
-    const fname=`Invoice_${(r.noInv||r.id).replace(/[^a-zA-Z0-9]/g,'_')}_${(r.customer||'').replace(/[^a-zA-Z0-9]/g,'_')}.docx`;
+    const noFile=perPay?(sel.noInv||(r.noInv||r.id)+'_'+payLabel_(payIdx,hasDP)):(r.noInv||r.id);
+    const fname=`Invoice_${String(noFile).replace(/[^a-zA-Z0-9]/g,'_')}_${(r.customer||'').replace(/[^a-zA-Z0-9]/g,'_')}.docx`;
     const link=document.createElement('a');
     link.href=URL.createObjectURL(blob); link.download=fname;
     document.body.appendChild(link); link.click(); link.remove();
