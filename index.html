@@ -158,6 +158,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .pay-list td{padding:5px 9px;border-bottom:1px solid #f0f2f5;vertical-align:middle;}
 .pay-list input{border:1px solid #dde3ec;padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--font);outline:none;}
 .pay-list input:focus{border-color:var(--primary-light);}
+.pay-list td.pay-label{font-weight:700;color:var(--primary);white-space:nowrap;}
 
 /* UPLOAD BUKTI */
 .upload-bukti-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;background:#e8f4fd;border:1px dashed #2563a8;border-radius:5px;color:var(--primary-light);font-size:10px;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap;}
@@ -743,8 +744,20 @@ async function pullFromSheets(){
 
 // Kirim seluruh database ke Google Sheets sekarang juga (tanpa menunggu debounce).
 // Dipakai baik oleh auto-sync maupun tombol "Sync Sekarang" manual.
+// LABEL PEMBAYARAN: setiap baris history pembayaran diberi label urut
+// "Pembayaran 1", "Pembayaran 2", dst. Label ditaruh paling depan supaya
+// kolom PaymentsJSON di Google Sheets enak dibaca.
+function payLabel_(i){ return 'Pembayaran '+(i+1); }
+function labelPayments_(list){
+  return (list||[]).map((p,i)=>({label:payLabel_(i),tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||''}));
+}
+function labelAllPayments_(){
+  [db.mesin,db.spare].forEach(arr=>(arr||[]).forEach(r=>{ r.payments=labelPayments_(r.payments); }));
+}
+
 async function pushToSheetsNow(silent){
   try{
+    labelAllPayments_();
     setSyncStatus('☁️ Menyimpan ke Google Sheets...');
     // Content-Type text/plain sengaja dipakai agar browser tidak mengirim
     // preflight OPTIONS request (Apps Script tidak menangani OPTIONS).
@@ -790,6 +803,7 @@ function forceSyncNow(){
 // ═══════════════════════════════════════════════════════
 async function saveData(){
   try {
+    labelAllPayments_();
     await idbSet('store','main_db', JSON.stringify(db));
     updateDbInfo();
     pushToSheets();
@@ -1340,7 +1354,7 @@ async function showPayDetail(id,type){
   const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
   if(!r) return;
   let h=`<p class="text-sm" style="margin-bottom:12px">Barang: <b>${r.barang}</b></p>
-    <table class="pay-list"><thead><tr><th>No</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Keterangan</th><th>Bukti</th></tr></thead><tbody>`;
+    <table class="pay-list"><thead><tr><th>Pembayaran</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Keterangan</th><th>Bukti</th></tr></thead><tbody>`;
   if(r.payments&&r.payments.length){
     for(const [i,p] of r.payments.entries()){
       const imgKey=`${type}_${id}_pay_${i}`;
@@ -1348,7 +1362,7 @@ async function showPayDetail(id,type){
       const buktiHtml=imgData
         ?`<img src="${imgData}" class="img-thumb" onclick="openLightbox('${imgKey}')" title="Klik untuk perbesar">`
         :`<span style="color:#ccc;font-size:10px">-</span>`;
-      h+=`<tr><td>${i+1}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td>${buktiHtml}</td></tr>`;
+      h+=`<tr><td class="pay-label">${payLabel_(i)}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td>${buktiHtml}</td></tr>`;
     }
   } else h+=`<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Belum ada history</td></tr>`;
   h+=`</tbody></table>`;
@@ -1364,11 +1378,12 @@ function renderPayRows(prefix){
   const id=prefix==='mesin'?'m-pay-list':'s-pay-list';
   const el=document.getElementById(id); if(!el) return;
   let h=`<table class="pay-list"><thead><tr>
-    <th>Tanggal</th><th>Jumlah (Rp)</th><th>Rekening</th><th>Keterangan</th><th>Bukti (JPG/PNG)</th><th></th>
+    <th>Pembayaran</th><th>Tanggal</th><th>Jumlah (Rp)</th><th>Rekening</th><th>Keterangan</th><th>Bukti (JPG/PNG)</th><th></th>
   </tr></thead><tbody>`;
   payRows.forEach((p,i)=>{
     const hasImg=p._imgPreview||p._hasImg;
     h+=`<tr id="payrow-${i}">
+      <td class="pay-label">${payLabel_(i)}</td>
       <td><input type="date" value="${p.tgl||''}" onchange="payRows[${i}].tgl=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:120px"></td>
       <td><input type="number" value="${p.jumlah||''}" onchange="payRows[${i}].jumlah=Number(this.value)" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
       <td><input type="text" value="${p.rek||''}" onchange="payRows[${i}].rek=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:100px"></td>
@@ -1582,7 +1597,7 @@ async function saveMesin(){
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
   const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
-  const cleanPay=payRows.map(p=>({tgl:p.tgl,jumlah:p.jumlah,rek:p.rek,ket:p.ket}));
+  const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   const finalId=editingId||uid();
   if(editingId){const idx=db.mesin.findIndex(m=>m.id===editingId);db.mesin[idx]={...db.mesin[idx],...data};}
@@ -1670,7 +1685,7 @@ async function saveSpare(){
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
   const aggHarga=cleanItems.length?cleanItems[0].harga:0;
   const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
-  const cleanPay=payRows.map(p=>({tgl:p.tgl,jumlah:p.jumlah,rek:p.rek,ket:p.ket}));
+  const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   const finalId=editingId||uid();
   if(editingId){const idx=db.spare.findIndex(m=>m.id===editingId);db.spare[idx]={...db.spare[idx],...data};}
