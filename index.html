@@ -459,7 +459,8 @@ tbody td{padding:8px 11px;vertical-align:top;}
       <div class="form-grid" style="margin-top:16px">
         <div class="form-group"><label>DPP (Rp) — Otomatis dari Daftar Barang</label><input type="number" id="m-dpp" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>PPN (Rp)</label><input type="number" id="m-ppn" placeholder="0" oninput="calcMesinTotal()"></div>
-        <div class="form-group"><label>TOTAL (Rp)</label><input type="number" id="m-total" readonly style="background:#f5f7fa"></div>
+        <div class="form-group"><label>Discount (Rp)</label><input type="number" id="m-discount" placeholder="0" min="0" oninput="calcMesinTotal()"></div>
+        <div class="form-group"><label>TOTAL (Rp) — DPP − Discount + PPN</label><input type="number" id="m-total" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>Status</label>
           <select id="m-status"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select>
         </div>
@@ -511,7 +512,8 @@ tbody td{padding:8px 11px;vertical-align:top;}
       <div class="form-grid" style="margin-top:16px">
         <div class="form-group"><label>DPP (Rp) — Otomatis dari Daftar Barang</label><input type="number" id="s-dpp" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>PPN (Rp)</label><input type="number" id="s-ppn" placeholder="0" oninput="calcSpareTotal()"></div>
-        <div class="form-group"><label>TOTAL (Rp)</label><input type="number" id="s-total" readonly style="background:#f5f7fa"></div>
+        <div class="form-group"><label>Discount (Rp)</label><input type="number" id="s-discount" placeholder="0" min="0" oninput="calcSpareTotal()"></div>
+        <div class="form-group"><label>TOTAL (Rp) — DPP − Discount + PPN</label><input type="number" id="s-total" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>Status</label><select id="s-status"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select></div>
         <div class="form-group"><label>Jadwal Pay</label><input type="date" id="s-jadwal-pay"></div>
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="s-tgl-kirim"></div>
@@ -1538,13 +1540,14 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeLightbox(); }
 function calcMesinTotal(){
   const d=Number(document.getElementById('m-dpp').value)||0;
   const p=Number(document.getElementById('m-ppn').value)||0;
-  document.getElementById('m-total').value=d+p;
+  const disc=Number(document.getElementById('m-discount').value)||0;
+  document.getElementById('m-total').value=d-disc+p;
 }
 function openAddMesin(){
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-mesin-title').textContent='Tambah Penjualan Mesin';
   ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
-  ['m-dpp','m-ppn','m-total','m-ar'].forEach(id=>document.getElementById(id).value='');
+  ['m-dpp','m-ppn','m-discount','m-total','m-ar'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-status').value='BELUM';
   const s=db.sales.find(x=>x.id===currentSalesId);
   if(s) document.getElementById('m-sales').value=s.nama;
@@ -1577,6 +1580,7 @@ async function editMesin(id){
   document.getElementById('m-pic').value=r.pic||'';
   document.getElementById('m-alamat').value=r.alamat||'';
   document.getElementById('m-ppn').value=r.ppn||'';
+  document.getElementById('m-discount').value=r.discount||'';
   document.getElementById('m-total').value=r.total||'';
   document.getElementById('m-status').value=r.status||'BELUM';
   document.getElementById('m-tgl-lunas').value=r.tglLunas||'';
@@ -1596,7 +1600,7 @@ async function saveMesin(){
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
-  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   const finalId=editingId||uid();
@@ -1629,13 +1633,14 @@ async function deleteMesin(id){
 function calcSpareTotal(){
   const d=Number(document.getElementById('s-dpp').value)||0;
   const p=Number(document.getElementById('s-ppn').value)||0;
-  document.getElementById('s-total').value=d+p;
+  const disc=Number(document.getElementById('s-discount').value)||0;
+  document.getElementById('s-total').value=d-disc+p;
 }
 function openAddSpare(){
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-spare-title').textContent='Tambah Penjualan Spareparts';
   ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-pic-handled','s-customer','s-pic','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
-  ['s-dpp','s-ppn','s-total','s-ar'].forEach(id=>document.getElementById(id).value='');
+  ['s-dpp','s-ppn','s-discount','s-total','s-ar'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s-status').value='BELUM';
   document.getElementById('s-jenis').value='Sparepart';
   const s=db.sales.find(x=>x.id===currentSalesId);
@@ -1665,6 +1670,7 @@ async function editSpare(id){
   document.getElementById('s-alamat').value=r.alamat||'';
   document.getElementById('s-jenis').value=r.jenis||'Sparepart';
   document.getElementById('s-ppn').value=r.ppn||'';
+  document.getElementById('s-discount').value=r.discount||'';
   document.getElementById('s-total').value=r.total||'';
   document.getElementById('s-status').value=r.status||'BELUM';
   document.getElementById('s-jadwal-pay').value=r.jadwalPay||'';
@@ -1684,7 +1690,7 @@ async function saveSpare(){
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
   const aggHarga=cleanItems.length?cleanItems[0].harga:0;
-  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   const finalId=editingId||uid();
