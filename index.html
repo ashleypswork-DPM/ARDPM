@@ -159,9 +159,13 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .pay-list input{border:1px solid #dde3ec;padding:4px 6px;border-radius:4px;font-size:11px;font-family:var(--font);outline:none;}
 .pay-list input:focus{border-color:var(--primary-light);}
 .pay-list td.pay-label{font-weight:700;color:var(--primary);white-space:nowrap;}
+/* Form Mesin/Spare dilebarkan supaya tabel History Pembayaran (dengan kolom No Invoice) muat */
+#modal-mesin .modal,#modal-spare .modal{max-width:900px;}
+#m-pay-list,#s-pay-list{overflow-x:auto;}
+#m-pay-list .pay-list th,#m-pay-list .pay-list td,#s-pay-list .pay-list th,#s-pay-list .pay-list td{padding-left:6px;padding-right:6px;}
 
 /* UPLOAD BUKTI */
-.upload-bukti-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;background:#e8f4fd;border:1px dashed #2563a8;border-radius:5px;color:var(--primary-light);font-size:10px;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap;}
+.upload-bukti-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:4px 8px;background:#e8f4fd;border:1px dashed #2563a8;border-radius:5px;color:var(--primary-light);font-size:10px;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap;}
 .upload-bukti-btn:hover{background:#d0eafa;border-style:solid;}
 .upload-bukti-btn.has-file{background:#e8f8ef;border-color:var(--lunas);color:var(--lunas);}
 .img-thumb{width:28px;height:28px;object-fit:cover;border-radius:3px;cursor:pointer;border:1px solid var(--border);transition:.15s;}
@@ -765,11 +769,13 @@ async function pullFromSheets(){
 // kolom PaymentsJSON di Google Sheets enak dibaca.
 // Kalau baris pertama dipilih sebagai DP, labelnya "DP" lalu baris berikutnya
 // "Pembayaran 1", "Pembayaran 2", dst. Tanpa DP: langsung "Pembayaran 1", dst.
+const UPLOAD_ICON_='<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"/><path d="M7.5 8.5 12 4l4.5 4.5"/><path d="M4 13v4a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-4"/></svg>';
+function escAttr_(v){ return String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
 function payHasDP_(list){ return !!(list&&list[0]&&list[0].label==='DP'); }
 function payLabel_(i,hasDP){ return hasDP ? (i===0?'DP':'Pembayaran '+i) : 'Pembayaran '+(i+1); }
 function labelPayments_(list){
   const dp=payHasDP_(list);
-  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||''}));
+  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||''}));
 }
 function labelAllPayments_(){
   [db.mesin,db.spare].forEach(arr=>(arr||[]).forEach(r=>{ r.payments=labelPayments_(r.payments); }));
@@ -1374,7 +1380,7 @@ async function showPayDetail(id,type){
   const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
   if(!r) return;
   let h=`<p class="text-sm" style="margin-bottom:12px">Barang: <b>${r.barang}</b></p>
-    <table class="pay-list"><thead><tr><th>Pembayaran</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Keterangan</th><th>Bukti</th></tr></thead><tbody>`;
+    <table class="pay-list"><thead><tr><th>Pembayaran</th><th>No Invoice</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Keterangan</th><th>Bukti</th></tr></thead><tbody>`;
   if(r.payments&&r.payments.length){
     for(const [i,p] of r.payments.entries()){
       const imgKey=`${type}_${id}_pay_${i}`;
@@ -1382,9 +1388,9 @@ async function showPayDetail(id,type){
       const buktiHtml=imgData
         ?`<img src="${imgData}" class="img-thumb" onclick="openLightbox('${imgKey}')" title="Klik untuk perbesar">`
         :`<span style="color:#ccc;font-size:10px">-</span>`;
-      h+=`<tr><td class="pay-label">${payLabel_(i,payHasDP_(r.payments))}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td>${buktiHtml}</td></tr>`;
+      h+=`<tr><td class="pay-label">${payLabel_(i,payHasDP_(r.payments))}</td><td>${escAttr_(p.noInv)||'-'}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td>${buktiHtml}</td></tr>`;
     }
-  } else h+=`<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Belum ada history</td></tr>`;
+  } else h+=`<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Belum ada history</td></tr>`;
   h+=`</tbody></table>`;
   document.getElementById('paydetail-body').innerHTML=h;
   openModal('modal-paydetail');
@@ -1398,19 +1404,20 @@ function renderPayRows(prefix){
   const id=prefix==='mesin'?'m-pay-list':'s-pay-list';
   const el=document.getElementById(id); if(!el) return;
   let h=`<table class="pay-list"><thead><tr>
-    <th>Pembayaran</th><th>Tanggal</th><th>Jumlah (Rp)</th><th>Rekening</th><th>Keterangan</th><th>Bukti (JPG/PNG)</th><th></th>
+    <th>Pembayaran</th><th>No Invoice</th><th>Tanggal</th><th>Jumlah (Rp)</th><th>Rekening</th><th>Keterangan</th><th>Bukti</th><th></th>
   </tr></thead><tbody>`;
   payRows.forEach((p,i)=>{
     const hasImg=p._imgPreview||p._hasImg;
     h+=`<tr id="payrow-${i}">
       <td class="pay-label">${payLabel_(i,payHasDP_(payRows))}</td>
+      <td><input type="text" value="${escAttr_(p.noInv)}" placeholder="No Invoice" onchange="payRows[${i}].noInv=this.value.trim()" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:120px"></td>
       <td><input type="date" value="${p.tgl||''}" onchange="payRows[${i}].tgl=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:120px"></td>
       <td><input type="number" value="${p.jumlah||''}" onchange="payRows[${i}].jumlah=Number(this.value)" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
       <td><input type="text" value="${p.rek||''}" onchange="payRows[${i}].rek=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:100px"></td>
       <td><input type="text" value="${p.ket||''}" onchange="payRows[${i}].ket=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
       <td>
         <label class="upload-bukti-btn ${hasImg?'has-file':''}" for="bukti-file-${i}" title="${hasImg?'Gambar tersimpan — klik untuk ganti':'Upload bukti pembayaran'}">
-          ${hasImg?'📷 Ada':'📎 Upload'}
+          ${UPLOAD_ICON_}
         </label>
         <input type="file" id="bukti-file-${i}" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="handleBuktiUpload(${i},this,'${prefix}')">
         ${p._imgPreview?`<img src="${p._imgPreview}" class="img-thumb" style="margin-left:4px" onclick="openLightboxSrc('${p._imgPreview}')" title="Klik perbesar">`:''}
@@ -1480,7 +1487,7 @@ function renderItemRows(prefix){
       <td class="currency" id="item-subtotal-${i}">${fmt(itemRowSubtotal_(it))}</td>
       <td><input type="text" value="${(it.seri||'').replace(/"/g,'&quot;')}" placeholder="-" oninput="itemRows[${i}].seri=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:90px"></td>
       ${isMesin?`<td>
-        <label class="upload-bukti-btn ${hasImg?'has-file':''}" for="item-seri-file-${i}" title="${hasImg?'Foto tersimpan — klik untuk ganti':'Upload foto No. Seri'}">${hasImg?'📷 Ada':'📎 Upload'}</label>
+        <label class="upload-bukti-btn ${hasImg?'has-file':''}" for="item-seri-file-${i}" title="${hasImg?'Foto tersimpan — klik untuk ganti':'Upload foto No. Seri'}">${UPLOAD_ICON_}</label>
         <input type="file" id="item-seri-file-${i}" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="handleItemSeriUpload(${i},this,'${prefix}')">
         ${it._imgPreview?`<img src="${it._imgPreview}" class="img-thumb" style="margin-left:4px" onclick="openLightboxSrc('${it._imgPreview}')" title="Klik perbesar">`:''}
       </td>`:''}
