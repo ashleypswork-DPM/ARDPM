@@ -2779,13 +2779,97 @@ function exportXLSX(){
   function fillColor(rgb){return{fill:{patternType:'solid',fgColor:{rgb}}};}
   function border(){return{border:{top:{style:'thin',color:{rgb:'DDE3EC'}},bottom:{style:'thin',color:{rgb:'DDE3EC'}},left:{style:'thin',color:{rgb:'DDE3EC'}},right:{style:'thin',color:{rgb:'DDE3EC'}}}};}
   function center(){return{alignment:{horizontal:'center',vertical:'center'}};}
+  // Ubah semua teks tanggal "yyyy-mm-dd" di sheet menjadi tanggal Excel asli berformat dd/mm/yyyy
+  function fixDates(ws){
+    Object.keys(ws).forEach(k=>{
+      if(k[0]==='!') return;
+      const c=ws[k];
+      if(c && typeof c.v==='string' && /^\d{4}-\d{2}-\d{2}$/.test(c.v)){
+        c.t='n'; c.v=excelSerial_(c.v); c.z='dd/mm/yyyy';
+        c.s={...(c.s||{}),numFmt:'dd/mm/yyyy',alignment:{...((c.s&&c.s.alignment)||{}),horizontal:'center'}};
+      }
+    });
+    return ws;
+  }
+  const num=v=>Number(v)||0;
+
+  // SHEET AR — rekap AR per PIC (sales), dengan filter PIC di kolom A.
+  // Setiap baris membawa nama PIC di kolom A, jadi filter "Edi" menampilkan
+  // blok laporan Edi saja; "(Select All)" menampilkan semua PIC.
+  function buildAR(){
+    const ws={}; let R=0;
+    const F='Calibri';
+    const bd={top:{style:'thin',color:{rgb:'BFC7D5'}},bottom:{style:'thin',color:{rgb:'BFC7D5'}},left:{style:'thin',color:{rgb:'BFC7D5'}},right:{style:'thin',color:{rgb:'BFC7D5'}}};
+    const put=(r,c,cell)=>{ ws[XLSX.utils.encode_cell({r,c})]=cell; };
+    const NUMFMT='_-* #,##0_-;\\-* #,##0_-;_-* "-"_-;_-@_-';
+    const sPic={font:{name:F,sz:9,color:{rgb:'9AA5B1'}}};
+    const sHead={font:{name:F,sz:10,bold:true},fill:{patternType:'solid',fgColor:{rgb:'D9E2F3'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd};
+    const sTxt={font:{name:F,sz:10},border:bd,alignment:{vertical:'top',wrapText:true}};
+    const sNum={font:{name:F,sz:10},border:bd,numFmt:NUMFMT};
+    const sDate={font:{name:F,sz:10},border:bd,numFmt:'dd/mm/yyyy',alignment:{horizontal:'center',vertical:'top'}};
+    const bulan=['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
+    const now=new Date();
+    put(0,0,{t:'s',v:`REPORT AR PER ${now.getDate()} ${bulan[now.getMonth()]} ${now.getFullYear()}`,s:{font:{name:F,sz:14,bold:true},alignment:{horizontal:'left'}}});
+    put(2,0,{t:'s',v:'Filter PIC',s:{font:{name:F,sz:10,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:{rgb:'1A3A5C'}},alignment:{horizontal:'center'}}});
+    put(2,1,{t:'s',v:'◄ Klik tanda ▼ di "Filter PIC" lalu pilih nama PIC. Centang (Select All) untuk menampilkan semua PIC.',s:{font:{name:F,sz:9,italic:true,color:{rgb:'7A8699'}}}});
+    R=4;
+    const firstData=R; const totalCells=[];
+    const salesList=db.sales.filter(sl=>[...db.mesin,...db.spare].some(r=>r.salesId===sl.id));
+    salesList.forEach(sl=>{
+      const recs=[...db.mesin.filter(r=>r.salesId===sl.id),...db.spare.filter(r=>r.salesId===sl.id)]
+        .sort((a,b)=>String(a.tglPO||'').localeCompare(String(b.tglPO||'')));
+      const pic=sl.nama;
+      put(R,0,{t:'s',v:pic,s:sPic});
+      put(R,1,{t:'s',v:'NAMA PIC:',s:{font:{name:F,sz:10,bold:true}}});
+      put(R,2,{t:'s',v:pic,s:{font:{name:F,sz:10,bold:true}}}); R++;
+      put(R,0,{t:'s',v:pic,s:sPic});
+      ['NAMA CUSTOMER','NAMA BARANG','TANGGAL KIRIM','HARGA','DONE PAYMENT','AR'].forEach((h,i)=>put(R,1+i,{t:'s',v:h,s:sHead})); R++;
+      const r0=R;
+      recs.forEach(r=>{
+        // DONE PAYMENT = semua pembayaran + PPh Jasa + Biaya Admin (sama dengan perhitungan pelunasan di aplikasi)
+        const paid=(r.payments||[]).reduce((a,p)=>a+num(p.jumlah),0)+num(r.pph)+num(r.admin);
+        const harga=num(r.total);
+        put(R,0,{t:'s',v:pic,s:sPic});
+        put(R,1,{t:'s',v:r.customer||'-',s:sTxt});
+        put(R,2,{t:'s',v:r.barang||'-',s:sTxt});
+        const tk=/^\d{4}-\d{2}-\d{2}$/.test(r.tglKirim||'');
+        put(R,3,tk?{t:'n',v:excelSerial_(r.tglKirim),z:'dd/mm/yyyy',s:sDate}:{t:'s',v:'-',s:{...sTxt,alignment:{horizontal:'center'}}});
+        put(R,4,{t:'n',v:harga,s:sNum});
+        put(R,5,{t:'n',v:paid,s:sNum});
+        const eA=XLSX.utils.encode_cell({r:R,c:4}), fA=XLSX.utils.encode_cell({r:R,c:5});
+        put(R,6,{t:'n',f:`${eA}-${fA}`,v:harga-paid,s:sNum});
+        R++;
+      });
+      const g1=XLSX.utils.encode_cell({r:r0,c:6}), g2=XLSX.utils.encode_cell({r:R-1,c:6});
+      const totAR=recs.reduce((a,r)=>a+num(r.total)-(r.payments||[]).reduce((x,p)=>x+num(p.jumlah),0)-num(r.pph)-num(r.admin),0);
+      put(R,0,{t:'s',v:pic,s:sPic});
+      put(R,5,{t:'s',v:'Total AR '+pic,s:{font:{name:F,sz:10,bold:true},border:bd}});
+      put(R,6,{t:'n',f:`SUM(${g1}:${g2})`,v:totAR,s:{...sNum,font:{name:F,sz:10,bold:true}}});
+      totalCells.push(XLSX.utils.encode_cell({r:R,c:6}));
+      R++;
+      put(R,0,{t:'s',v:pic,s:sPic}); R++;   // baris kosong pemisah (ikut tersaring)
+    });
+    if(!salesList.length){ put(R,1,{t:'s',v:'(Belum ada transaksi)',s:sTxt}); R++; }
+    else{
+      // Grand total: kolom A dikosongkan supaya hanya tampil saat semua PIC dipilih
+      const grand=totalCells.reduce((a,c)=>a+(ws[c].v||0),0);
+      put(R,5,{t:'s',v:'TOTAL AR SEMUA PIC',s:{font:{name:F,sz:10,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:{rgb:'1A3A5C'}},border:bd}});
+      put(R,6,{t:'n',f:totalCells.join('+'),v:grand,s:{...sNum,font:{name:F,sz:10,bold:true,color:{rgb:'FFFFFF'}},fill:{patternType:'solid',fgColor:{rgb:'1A3A5C'}}}});
+      R++;
+    }
+    ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(R,firstData),c:6}});
+    ws['!autofilter']={ref:XLSX.utils.encode_range({s:{r:2,c:0},e:{r:Math.max(R-1,3),c:0}})};
+    ws['!cols']=[{wch:12},{wch:30},{wch:38},{wch:14},{wch:18},{wch:18},{wch:18}];
+    ws['!rows']=[{hpt:24}];
+    return ws;
+  }
 
   // DASHBOARD SHEET
   function buildDash(){
     const ws={};
     const allRec=[...db.mesin,...db.spare];
-    const totalVal=allRec.reduce((a,r)=>a+(r.total||0),0);
-    const totalAR=allRec.reduce((a,r)=>a+(r.ar||0),0);
+    const totalVal=allRec.reduce((a,r)=>a+num(r.total),0);
+    const totalAR=allRec.reduce((a,r)=>a+num(r.ar),0);
     const L=allRec.filter(r=>r.status==='LUNAS').length;
     const B=allRec.filter(r=>r.status==='BELUM').length;
     const P=allRec.filter(r=>r.status==='PROGRESS').length;
@@ -2834,12 +2918,12 @@ function exportXLSX(){
       cityS.forEach(sales=>{
         const records=db.mesin.filter(m=>m.salesId===sales.id);
         if(!records.length){aoa.push(['-','(Belum ada transaksi)',...Array(hdr.length-2).fill('')]);return;}
-        records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,sales.nama,r.customer,r.pic,r.barang,r.qty,r.seri,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[1]?r.payments[1].jumlah:'',r.payments[1]?r.payments[1].tgl:'',r.payments[2]?r.payments[2].jumlah:'',r.payments[2]?r.payments[2].tgl:'',statusLabel(r.status),r.tglLunas,r.ket,r.tglKirim,r.tglSetup,r.ar]);});
-        const tot=records.reduce((a,r)=>a+(r.total||0),0);const ar=records.reduce((a,r)=>a+(r.ar||0),0);
+        records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,sales.nama,r.customer,r.pic,r.barang,r.qty,r.seri,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[1]?r.payments[1].jumlah:'',r.payments[1]?r.payments[1].tgl:'',r.payments[2]?r.payments[2].jumlah:'',r.payments[2]?r.payments[2].tgl:'',statusLabel(r.status),r.tglLunas,r.ket,r.tglKirim,r.tglSetup,num(r.ar)]);});
+        const tot=records.reduce((a,r)=>a+num(r.total),0);const ar=records.reduce((a,r)=>a+num(r.ar),0);
         aoa.push(['','','','','','SUBTOTAL '+sales.nama,'','','','',tot,'','','','','','','','','','','',ar]);
       });
     });
-    const gT=db.mesin.reduce((a,r)=>a+(r.total||0),0);const gA=db.mesin.reduce((a,r)=>a+(r.ar||0),0);
+    const gT=db.mesin.reduce((a,r)=>a+num(r.total),0);const gA=db.mesin.reduce((a,r)=>a+num(r.ar),0);
     aoa.push(['','','','','','GRAND TOTAL','','','','',gT,'','','','','','','','','','','',gA]);
     const ws=XLSX.utils.aoa_to_sheet(aoa);
     const range=XLSX.utils.decode_range(ws['!ref']);
@@ -2891,23 +2975,56 @@ function exportXLSX(){
       cityS.forEach(sales=>{
         const records=db.spare.filter(m=>m.salesId===sales.id);
         if(!records.length){aoa.push(['-','(Belum ada transaksi)',...Array(hdr.length-2).fill('')]);return;}
-        records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,r.noPO,r.noInv,r.tglInv,r.picHandled,r.customer,r.pic,r.barang,r.jenis,r.qty,r.seri,r.harga,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[0]?r.payments[0].rek:'',r.payments[0]?r.payments[0].ket:'',statusLabel(r.status),r.jadwalPay,r.tglKirim,r.tglPasang,r.ar]);});
-        const tot=records.reduce((a,r)=>a+(r.total||0),0);const ar=records.reduce((a,r)=>a+(r.ar||0),0);
+        records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,r.noPO,r.noInv,r.tglInv,r.picHandled,r.customer,r.pic,r.barang,r.jenis,r.qty,r.seri,r.harga,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[0]?r.payments[0].rek:'',r.payments[0]?r.payments[0].ket:'',statusLabel(r.status),r.jadwalPay,r.tglKirim,r.tglPasang,num(r.ar)]);});
+        const tot=records.reduce((a,r)=>a+num(r.total),0);const ar=records.reduce((a,r)=>a+num(r.ar),0);
         aoa.push(['','','','','','','SUBTOTAL '+sales.nama,'','','','','','','','',tot,'','','','','','','','',ar]);
       });
     });
-    const gT=db.spare.reduce((a,r)=>a+(r.total||0),0);const gA=db.spare.reduce((a,r)=>a+(r.ar||0),0);
+    const gT=db.spare.reduce((a,r)=>a+num(r.total),0);const gA=db.spare.reduce((a,r)=>a+num(r.ar),0);
     aoa.push(['','','','','','','GRAND TOTAL','','','','','','','','',gT,'','','','','','','','',gA]);
     const ws=XLSX.utils.aoa_to_sheet(aoa);
+    // Gaya warna & font sama seperti sheet Mesin
+    const range=XLSX.utils.decode_range(ws['!ref']);
+    const currCols=[12,13,14,15,16,24];  // Harga/PC, DPP, PPN, TOTAL, DP1, A/R
+    const STATUS_COL=20, AR_COL=24;
+    for(let R=range.s.r;R<=range.e.r;R++){
+      for(let C2=range.s.c;C2<=range.e.c;C2++){
+        const addr=XLSX.utils.encode_cell({r:R,c:C2});
+        if(!ws[addr]) ws[addr]={t:'s',v:''};
+        const v=ws[addr].v;
+        const rowVals=[0,6].map(c=>{const a=ws[XLSX.utils.encode_cell({r:R,c})];return a?a.v:'';});
+        const isCityRow=typeof rowVals[0]==='string'&&(rowVals[0].includes('🏭')||rowVals[0].includes('🌆')||rowVals[0].includes('🔧')||rowVals[0].includes('📍')||db.locations.some(l=>rowVals[0].includes(l.toUpperCase())));
+        const isSubtotal=typeof rowVals[1]==='string'&&rowVals[1].startsWith('SUBTOTAL');
+        const isGrand=typeof rowVals[1]==='string'&&rowVals[1].startsWith('GRAND TOTAL');
+        const isCurr=currCols.includes(C2);
+        if(R===0){ws[addr].s={font:{bold:true,sz:13,color:{rgb:C.white},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:C.header}},alignment:{horizontal:'center'}};}
+        else if(R===1){ws[addr].s={font:{sz:9,color:{rgb:C.white},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:C.subheader}}};}
+        else if(R===2){ws[addr].s={};}
+        else if(R===3){ws[addr].s={font:{bold:true,sz:10,color:{rgb:C.white},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:C.header}},alignment:{horizontal:'center',vertical:'center',wrapText:true},...border()};}
+        else if(isCityRow){ws[addr].s={font:{bold:true,sz:10,color:{rgb:C.white},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:C.accent}}};}
+        else if(isGrand){ws[addr].s={font:{bold:true,sz:10,color:{rgb:C.white},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:C.header}},alignment:{horizontal:isCurr?'right':'left'},...border()};}
+        else if(isSubtotal){ws[addr].s={font:{bold:true,sz:10,color:{rgb:C.header},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:'D6E4F5'}},alignment:{horizontal:isCurr?'right':'left'},...border()};}
+        else{
+          const st=ws[XLSX.utils.encode_cell({r:R,c:STATUS_COL})];
+          const statusV=st?st.v:'';
+          const bg=statusV==='LUNAS'?'F0FBF4':statusV==='PROGRESS'?'FFFBF0':R%2===0?C.white:'F8F9FB';
+          ws[addr].s={font:{sz:10,color:{rgb:C.header},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:bg}},alignment:{horizontal:isCurr?'right':(C2===0||C2===10)?'center':'left',vertical:'center',wrapText:C2===8},...border()};
+          if(C2===STATUS_COL){const sc=v==='LUNAS'?C.lunas:v==='PROGRESS'?C.progress:C.belum;ws[addr].s.font={bold:true,sz:10,color:{rgb:sc},name:'Calibri'};}
+          if(C2===AR_COL&&typeof v==='number'&&v>0)ws[addr].s.font={bold:true,sz:10,color:{rgb:C.belum},name:'Calibri'};
+        }
+        if(isCurr&&typeof ws[addr].v==='number'){ws[addr].t='n';ws[addr].z='"Rp "#,##0';ws[addr].s.numFmt='"Rp "#,##0';}
+      }
+    }
     ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:24}},{s:{r:1,c:0},e:{r:1,c:24}}];
     ws['!cols']=[4,12,10,18,12,14,22,14,32,9,5,12,14,14,12,14,13,12,12,14,11,12,12,12,15].map(w=>({wch:w}));
-    ws['!rows']=[{hpt:30},{hpt:16}];
+    ws['!rows']=[{hpt:30},{hpt:16},{hpt:6},{hpt:28}];
     return ws;
   }
 
+  XLSX.utils.book_append_sheet(wb,buildAR(),'Sheet AR');
   XLSX.utils.book_append_sheet(wb,buildDash(),'📊 Dashboard');
-  XLSX.utils.book_append_sheet(wb,buildMesin(),'🔩 Mesin');
-  XLSX.utils.book_append_sheet(wb,buildSpare(),'⚙️ Spareparts');
+  XLSX.utils.book_append_sheet(wb,fixDates(buildMesin()),'🔩 Mesin');
+  XLSX.utils.book_append_sheet(wb,fixDates(buildSpare()),'⚙️ Spareparts');
   XLSX.writeFile(wb,`AR_${ptNama.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('Export Excel berhasil!');
 }
