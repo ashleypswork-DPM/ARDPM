@@ -506,7 +506,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>PIC Customer</label><input type="text" id="m-pic" placeholder="Nama PIC"></div>
         <div class="form-group full"><label>Alamat Customer</label><textarea id="m-alamat" placeholder="Alamat lengkap customer"></textarea></div>
       </div>
-      <div class="section-divider">Daftar Barang <span style="color:var(--belum);font-weight:700">* minimal 1 barang, tiap barang wajib foto No. Seri</span></div>
+      <div class="section-divider">Daftar Barang <span style="color:var(--belum);font-weight:700">* minimal 1 barang</span> <span style="color:var(--text-light);font-weight:400">(foto No. Seri opsional)</span></div>
       <div id="m-item-list"></div>
       <button class="btn btn-outline" style="margin-top:8px;font-size:11px" onclick="addItemRow('mesin')">+ Tambah Barang</button>
       <div class="form-grid" style="margin-top:16px">
@@ -1597,7 +1597,7 @@ function renderItemRows(prefix){
   const el=document.getElementById(prefix==='mesin'?'m-item-list':'s-item-list'); if(!el) return;
   const isMesin=prefix==='mesin';
   let h=`<table class="pay-list"><thead><tr>
-    <th>Nama Barang</th><th>Qty</th><th>Harga/Unit (Rp)</th><th>Subtotal (Rp)</th><th>No. Seri</th>${isMesin?'<th>Foto No. Seri *</th>':''}<th></th>
+    <th>Nama Barang</th><th>Qty</th><th>Harga/Unit (Rp)</th><th>Subtotal (Rp)</th><th>No. Seri</th>${isMesin?'<th>Foto No. Seri</th>':''}<th></th>
   </tr></thead><tbody>`;
   itemRows.forEach((it,i)=>{
     const hasImg=it._imgPreview||it._hasImg;
@@ -1751,7 +1751,6 @@ async function saveMesin(){
   if(!itemRows.length){ toast('Minimal isi 1 barang','error'); return; }
   for(const[i,it] of itemRows.entries()){
     if(!it.barang){ toast(`Nama barang pada baris ${i+1} belum diisi`,'error'); return; }
-    if(!it._imgData && !it._hasImg){ toast(`Foto No. Seri pada barang "${it.barang}" wajib diupload`,'error'); return; }
   }
   const cleanItems=itemRows.map(it=>({barang:it.barang,qty:Number(it.qty)||0,harga:Number(it.harga)||0,seri:it.seri||''}));
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
@@ -2112,7 +2111,7 @@ function downloadImportTemplate(){
     ['• PPh Jasa (kolom abu-abu): isi kalau customer memotong PPh, kalau tidak ada isi 0 atau kosongkan. PPh dihitung sebagai bagian pelunasan.'],
     ['• Status kosong: otomatis LUNAS kalau total pembayaran + PPh ≥ TOTAL. A/R kosong: otomatis TOTAL − total pembayaran − PPh.'],
     ['• No Invoice per pembayaran tidak ada di rekap AR, jadi bisa dilengkapi nanti lewat Edit di aplikasi.'],
-    ['• Foto No. Seri tidak bisa diimport; untuk Mesin, foto diminta saat transaksi diedit lalu disimpan.']
+    ['• Foto No. Seri tidak bisa diimport, tapi bisa diupload nanti lewat Edit (tidak wajib).']
   ];
   const wsHelp=XLSX.utils.aoa_to_sheet(help);
   wsHelp['A1'].s={font:{name:F,sz:13,bold:true}};
