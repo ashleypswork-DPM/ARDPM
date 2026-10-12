@@ -281,6 +281,12 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .text-right{text-align:right!important;}
 .text-sm{font-size:10px;color:var(--text-light);}
 .ar-value{font-weight:700;color:var(--belum);}
+.ar-value.ar-nol{color:var(--lunas);}
+.ar-value.ar-lebih{color:#d35400;}
+.ar-hint{display:block;margin-top:4px;font-size:11px;color:var(--text-light);line-height:1.35;}
+.ar-hint.ok{color:var(--lunas);font-weight:600;}
+.ar-hint.kurang{color:#b45309;font-weight:600;}
+.ar-hint.lebih{color:#c62828;font-weight:700;}
 .currency{font-variant-numeric:tabular-nums;}
 .section-divider{font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;letter-spacing:1px;margin:14px 0 9px;padding-bottom:5px;border-bottom:1px solid var(--border);}
 
@@ -565,10 +571,10 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Tanggal Lunas</label><input type="date" id="m-tgl-lunas"></div>
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="m-tgl-kirim"></div>
         <div class="form-group"><label>Tanggal Setup</label><input type="date" id="m-tgl-setup"></div>
-        <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="m-ar" placeholder="0"></div>
-        <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="m-pph" placeholder="0" min="0"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
+        <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="m-ar" placeholder="0"><small class="ar-hint" id="m-ar-hint"></small></div>
+        <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="m-pph" placeholder="0" min="0" oninput="calcArAuto_('mesin')"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
         <div class="form-group form-spacer"></div>
-        <div class="form-group"><label>Biaya Admin (Rp)</label><input type="number" id="m-admin" placeholder="0" min="0"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. Biaya admin yang dipotong dari transfer customer dihitung sebagai bagian pelunasan.</small></div>
+        <div class="form-group"><label>Biaya Admin (Rp)</label><input type="number" id="m-admin" placeholder="0" min="0" oninput="calcArAuto_('mesin')"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. Biaya admin yang dipotong dari transfer customer dihitung sebagai bagian pelunasan.</small></div>
         <div class="form-group full"><label>Keterangan</label><textarea id="m-ket" placeholder="Catatan tambahan"></textarea></div>
       </div>
       <div class="section-divider">History Pembayaran</div>
@@ -619,10 +625,10 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Jadwal Pay</label><input type="date" id="s-jadwal-pay"></div>
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="s-tgl-kirim"></div>
         <div class="form-group"><label>Tanggal Pasang</label><input type="date" id="s-tgl-pasang"></div>
-        <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="s-ar" placeholder="0"></div>
-        <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="s-pph" placeholder="0" min="0"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
+        <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="s-ar" placeholder="0"><small class="ar-hint" id="s-ar-hint"></small></div>
+        <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="s-pph" placeholder="0" min="0" oninput="calcArAuto_('spare')"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
         <div class="form-group form-spacer"></div>
-        <div class="form-group"><label>Biaya Admin (Rp)</label><input type="number" id="s-admin" placeholder="0" min="0"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. Biaya admin yang dipotong dari transfer customer dihitung sebagai bagian pelunasan.</small></div>
+        <div class="form-group"><label>Biaya Admin (Rp)</label><input type="number" id="s-admin" placeholder="0" min="0" oninput="calcArAuto_('spare')"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. Biaya admin yang dipotong dari transfer customer dihitung sebagai bagian pelunasan.</small></div>
         <div class="form-group full"><label>Keterangan</label><textarea id="s-ket" placeholder="Catatan tambahan"></textarea></div>
       </div>
       <div class="section-divider">History Pembayaran</div>
@@ -862,6 +868,51 @@ function labelPayments_(list){
   const dp=payHasDP_(list);
   return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||''}));
 }
+// A/R = Total − (semua pembayaran + PPh Jasa + Biaya Admin), dihitung kalau History Pembayaran
+// sudah berisi angka. Status otomatis LUNAS kalau sudah tertutup penuh.
+// allowDowngrade=true: status LUNAS yang ternyata masih kurang diturunkan ke BELUM LUNAS.
+function settledOf_(r){
+  return (r.payments||[]).reduce((a,p)=>a+(Number(p.jumlah)||0),0)+(Number(r.pph)||0)+(Number(r.admin)||0);
+}
+function hasPayAmount_(r){ return (r.payments||[]).some(p=>(Number(p.jumlah)||0)!==0); }
+function syncArStatus_(r, allowDowngrade){
+  if(!hasPayAmount_(r)) return false;
+  const before=r.ar+'|'+r.status;
+  const sisa=Math.round(((Number(r.total)||0)-settledOf_(r))*100)/100;
+  r.ar=sisa;
+  if(sisa<1) r.status='LUNAS';
+  else if(allowDowngrade && r.status==='LUNAS') r.status='BELUM';
+  return before!==(r.ar+'|'+r.status);
+}
+function syncAllArStatus_(){
+  let n=0;
+  [db.mesin,db.spare].forEach(arr=>(arr||[]).forEach(r=>{ if(syncArStatus_(r,false)) n++; }));
+  return n;
+}
+// Di form: hitung A/R langsung dari History Pembayaran + PPh + Biaya Admin
+function calcArAuto_(prefix){
+  if(!prefix) return;
+  const g=id=>document.getElementById(prefix==='mesin'?'m-'+id:'s-'+id);
+  const arEl=g('ar'), stEl=g('status'), hint=document.getElementById((prefix==='mesin'?'m':'s')+'-ar-hint');
+  if(!arEl||!hint) return;
+  const rows=(typeof payRows!=='undefined'&&currentPayPrefix===prefix)?payRows:[];
+  const paid=rows.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
+  const anyPay=rows.some(p=>(Number(p.jumlah)||0)!==0);
+  if(!anyPay){
+    arEl.readOnly=false; arEl.style.background='';
+    hint.className='ar-hint'; hint.textContent='Isi History Pembayaran supaya A/R dan status terhitung otomatis.';
+    return;
+  }
+  const total=Number(g('total').value)||0;
+  const pph=Number(g('pph').value)||0, adm=Number(g('admin').value)||0;
+  const sisa=Math.round((total-paid-pph-adm)*100)/100;
+  arEl.value=sisa; arEl.readOnly=true; arEl.style.background='#f5f7fa';
+  const rinci=`Total ${fmt(total)} − dibayar ${fmt(paid)}${pph?` − PPh ${fmt(pph)}`:''}${adm?` − Biaya Admin ${fmt(adm)}`:''}`;
+  if(Math.abs(sisa)<1){ hint.className='ar-hint ok'; hint.textContent=`✅ Lunas. ${rinci}.`; if(stEl) stEl.value='LUNAS'; }
+  else if(sisa>0){ hint.className='ar-hint kurang'; hint.textContent=`Kurang ${fmt(sisa)}. ${rinci}.`; if(stEl&&stEl.value==='LUNAS') stEl.value='BELUM'; }
+  else { hint.className='ar-hint lebih'; hint.textContent=`⚠️ Lebih bayar ${fmt(-sisa)}. ${rinci}.`; if(stEl) stEl.value='LUNAS'; }
+}
+
 function labelAllPayments_(){
   [db.mesin,db.spare].forEach(arr=>(arr||[]).forEach(r=>{ r.payments=labelPayments_(r.payments); }));
 }
@@ -1566,7 +1617,7 @@ async function renderMesinTableBody(){
       <td class="text-right currency"><b>${fmt(r.total)}</b></td>
       <td>${chips}</td>
       <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span>${r.tglLunas?`<br><span class="text-sm">${fmtDate(r.tglLunas)}</span>`:''}</td>
-      <td class="text-right"><span class="ar-value">${fmt(r.ar)}</span></td>
+      <td class="text-right"><span class="ar-value ${Number(r.ar)<0?'ar-lebih':Math.abs(Number(r.ar)||0)<1?'ar-nol':''}">${Number(r.ar)<0?'Lebih '+fmt(-Number(r.ar)):fmt(Number(r.ar)||0)}</span></td>
       <td>${fmtDate(r.tglKirim)}</td>
       <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','mesin')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editMesin('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteMesin('${r.id}')">🗑️</button></td>
     </tr>`;
@@ -1618,7 +1669,7 @@ async function renderSpareTableBody(){
       <td class="text-right currency"><b>${fmt(r.total)}</b></td>
       <td>${chips}</td>
       <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td>
-      <td class="text-right"><span class="ar-value">${fmt(r.ar)}</span></td>
+      <td class="text-right"><span class="ar-value ${Number(r.ar)<0?'ar-lebih':Math.abs(Number(r.ar)||0)<1?'ar-nol':''}">${Number(r.ar)<0?'Lebih '+fmt(-Number(r.ar)):fmt(Number(r.ar)||0)}</span></td>
       <td>${fmtDate(r.jadwalPay)}</td>
       <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','spare')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editSpare('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteSpare('${r.id}')">🗑️</button></td>
     </tr>`;
@@ -1670,7 +1721,7 @@ function renderPayRows(prefix){
       <td class="pay-label">${payLabel_(i,payHasDP_(payRows))}</td>
       <td><input type="text" value="${escAttr_(p.noInv)}" placeholder="No Invoice" onchange="payRows[${i}].noInv=this.value.trim()" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:120px"></td>
       <td><input type="date" value="${p.tgl||''}" onchange="payRows[${i}].tgl=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:120px"></td>
-      <td><input type="number" value="${p.jumlah||''}" onchange="payRows[${i}].jumlah=Number(this.value)" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
+      <td><input type="number" value="${p.jumlah||''}" onchange="payRows[${i}].jumlah=Number(this.value)" oninput="payRows[${i}].jumlah=Number(this.value);calcArAuto_(currentPayPrefix)" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
       <td><input type="text" value="${p.rek||''}" onchange="payRows[${i}].rek=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:100px"></td>
       <td><input type="text" value="${p.ket||''}" onchange="payRows[${i}].ket=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
       <td>
@@ -1685,6 +1736,7 @@ function renderPayRows(prefix){
   });
   h+=`</tbody></table>`;
   el.innerHTML=h;
+  calcArAuto_(prefix);
 }
 function removePayRow(i,prefix){
   payRows.splice(i,1);
@@ -1834,6 +1886,7 @@ function calcMesinTotal(){
   const p=Number(document.getElementById('m-ppn').value)||0;
   const disc=Number(document.getElementById('m-discount').value)||0;
   document.getElementById('m-total').value=d-disc+p;
+  calcArAuto_('mesin');
 }
 function openAddMesin(){
   editingId=null;payRows=[];itemRows=[];
@@ -1898,6 +1951,7 @@ async function saveMesin(){
   const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,admin:Number(document.getElementById('m-admin').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
+  syncArStatus_(data,true);   // A/R & status mengikuti History Pembayaran
   const finalId=editingId||uid();
   if(editingId){const idx=db.mesin.findIndex(m=>m.id===editingId);db.mesin[idx]={...db.mesin[idx],...data};}
   else db.mesin.push({id:finalId,...data});
@@ -1930,6 +1984,7 @@ function calcSpareTotal(){
   const p=Number(document.getElementById('s-ppn').value)||0;
   const disc=Number(document.getElementById('s-discount').value)||0;
   document.getElementById('s-total').value=d-disc+p;
+  calcArAuto_('spare');
 }
 function openAddSpare(){
   editingId=null;payRows=[];itemRows=[];
@@ -1992,6 +2047,7 @@ async function saveSpare(){
   const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,admin:Number(document.getElementById('s-admin').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
+  syncArStatus_(data,true);   // A/R & status mengikuti History Pembayaran
   const finalId=editingId||uid();
   if(editingId){const idx=db.spare.findIndex(m=>m.id===editingId);db.spare[idx]={...db.spare[idx],...data};}
   else db.spare.push({id:finalId,...data});
@@ -2634,6 +2690,7 @@ async function confirmImport(){
   const defSales=document.getElementById('imp-sales').value;
   if(importParsedRows.some(x=>x.needDefaultSales) && !defSales){ toast('Pilih Sales default dulu (untuk transaksi yang kolom Sales-nya kosong)','error'); return; }
   importParsedRows.forEach(x=>{
+    syncArStatus_(x.rec,false);   // A/R & status mengikuti History Pembayaran
     if(x.needDefaultSales){
       x.rec.salesId=defSales;
       if(x.type==='mesin'){ const s=db.sales.find(s=>s.id===defSales); x.rec.sales=s?s.nama:''; }
@@ -3244,6 +3301,9 @@ async function startApp(){
     renderLanding();
     updateDbInfo();
   }
+  // Sesuaikan A/R & status semua transaksi lama dengan History Pembayarannya
+  const nSync=syncAllArStatus_();
+  if(nSync){ await saveData(); renderSidebar(); renderLanding(); toast(`${nSync} transaksi disesuaikan: A/R & status mengikuti History Pembayaran`); }
   showPaymentReminder();                   // pengingat customer terlambat bayar, tiap selesai login
 }
 
