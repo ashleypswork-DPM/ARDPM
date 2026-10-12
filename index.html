@@ -584,11 +584,11 @@ tbody td{padding:8px 11px;vertical-align:top;}
     <div class="modal-body">
       <div class="form-grid">
         <div class="form-group full" style="background:#f3f8fd;border:1px solid #d6e6f5;border-radius:8px;padding:10px 12px">
-          <p style="font-size:12px;color:var(--text);margin-bottom:8px">Bisa import Mesin dan Sparepart/Jasa sekaligus, lengkap dengan banyak barang dan History Pembayaran. Unduh formatnya dulu, isi, lalu pilih filenya di bawah.</p>
+          <p style="font-size:12px;color:var(--text);margin-bottom:8px">Pakai format rekap AR biasa: sheet <b>Mesin</b> (Payment I, II, … dengan tanggal &amp; keterangan transfer di baris bawahnya) dan sheet <b>Sparepart</b> (barang tambahan di baris bawahnya). File rekap AR yang sudah ada bisa langsung dipilih di bawah.</p>
           <button type="button" class="btn btn-outline" style="font-size:11px;width:auto;align-self:flex-start" onclick="downloadImportTemplate()">⬇️ Unduh Format Excel</button>
         </div>
         <div class="form-group full">
-          <label>Sales Default (untuk transaksi yang kolom Sales-nya kosong)</label>
+          <label>Sales Default (untuk Sparepart, dan transaksi yang Sales-nya kosong / tidak dikenal)</label>
           <select id="imp-sales"></select>
         </div>
         <div class="form-group full">
@@ -1988,90 +1988,243 @@ function openImportModal(){
 }
 
 // ── UNDUH FORMAT EXCEL ──────────────────────────────────
+// Format = rekap AR yang biasa dipakai: sheet "Mesin" dan "Sparepart".
+// 1 transaksi bisa beberapa baris:
+//  - Mesin: baris 1 = jumlah tiap Payment, baris 2 = tanggal bayar,
+//           baris 3 = keterangan transfer (rekening / a.n.)
+//  - Sparepart: baris 1 = transaksi + barang pertama, baris berikutnya
+//           (kolom No. kosong) = barang tambahan
 function excelSerial_(iso){
   const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   return m ? (Date.UTC(+m[1],+m[2]-1,+m[3])-Date.UTC(1899,11,30))/86400000 : 0;
 }
+const AR_MESIN_PAY_COUNT=8; // Payment I s/d VIII
 function downloadImportTemplate(){
   if(typeof XLSX==='undefined'){ toast('Komponen Excel belum termuat, cek koneksi internet','error'); return; }
   const F='Calibri';
-  const bd={top:{style:'thin',color:{rgb:'BFC7D5'}},bottom:{style:'thin',color:{rgb:'BFC7D5'}},left:{style:'thin',color:{rgb:'BFC7D5'}},right:{style:'thin',color:{rgb:'BFC7D5'}}};
-  const sHead=req=>({font:{name:F,sz:10,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:req?'1A3A5C':'5B7590'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd});
-  const sTxt={font:{name:F,sz:10,color:{rgb:'7A8699'},italic:true},border:bd,alignment:{vertical:'top',wrapText:true}};
+  const bd={top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}};
+  const sTitle={font:{name:F,sz:14,bold:true},alignment:{horizontal:'center'}};
+  const sHead=opt=>({font:{name:F,sz:10,bold:true,color:{rgb:opt?'555555':'000000'}},fill:{fgColor:{rgb:opt?'EDEDED':'FFD966'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd});
+  const sTxt={font:{name:F,sz:10},border:bd,alignment:{vertical:'top',wrapText:true}};
   const sNum={...sTxt,numFmt:'#,##0',alignment:{horizontal:'right',vertical:'top'}};
-  const sDate={...sTxt,numFmt:'dd/mm/yyyy',alignment:{horizontal:'center',vertical:'top'}};
-  const salesContoh=(db.sales[0]&&db.sales[0].nama)||'';
-  const buildSheet=(cols,rows)=>{
-    const ws={};
-    cols.forEach((c,ci)=>{ ws[XLSX.utils.encode_cell({r:0,c:ci})]={t:'s',v:c.h,s:sHead(c.req)}; });
-    rows.forEach((row,ri)=>{
-      cols.forEach((c,ci)=>{
-        const v=row[c.key]; const addr=XLSX.utils.encode_cell({r:ri+1,c:ci});
-        if(v===undefined||v===''){ ws[addr]={t:'s',v:'',s:sTxt}; return; }
-        if(c.date) ws[addr]={t:'n',v:excelSerial_(v),z:'dd/mm/yyyy',s:sDate};
-        else if(c.num) ws[addr]={t:'n',v:Number(v),s:sNum};
-        else ws[addr]={t:'s',v:String(v),s:sTxt};
-      });
-    });
-    ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(rows.length,1),c:cols.length-1}});
-    ws['!cols']=cols.map(c=>({wch:c.w}));
-    ws['!rows']=[{hpt:30}];
-    ws['!freeze']={xSplit:0,ySplit:1};
+  const sDate={...sTxt,numFmt:'d-mmm-yy',alignment:{horizontal:'center',vertical:'top'}};
+  const sDatePay={...sTxt,numFmt:'dd/mm/yyyy',alignment:{horizontal:'center',vertical:'top'}};
+  const roman=n=>invRoman_(n);
+  // kolom: [judul, tipe ('t'|'n'|'d'), lebar, opsional?]
+  const mesinCols=[['No.','t',6],['Tanggal PO','d',11],['Sales','t',10],['Customer','t',22],['PIC','t',14],['NAMA BARANG','t',30],['QTY','n',6],['No. Seri','t',12],['DPP','n',15],['PPN','n',14],['TOTAL','n',15]];
+  for(let i=1;i<=AR_MESIN_PAY_COUNT;i++) mesinCols.push(['Payment '+roman(i),'n',15]);
+  mesinCols.push(['STATUS','t',10],['Tanggal Lunas','d',11],['Ket','t',16],['Tanggal kirim','d',11],['Tanggal Set Up','d',11],['Jenis','t',8],['A/R','n',14],
+    ['No PO','t',12,1],['No Invoice','t',16,1],['Tanggal Inv','d',11,1],['Alamat','t',26,1],['Discount','n',14,1]);
+  const spareCols=[['No.','t',6],['Tanggal PO','d',11],['NO PO','t',12],['NO INV','t',16],['TANGGAL INV','d',11],['FP','t',7],['PIC Handled','t',11],['CUST','t',20],['PIC','t',13],['NAMA BARANG','t',28],['JENIS','t',10],['QTY','n',6],['No. Seri','t',10],['HARGA PER PC','n',13],['DPP','n',13],['PPN','n',12],['TOTAL','n',14],['Detail Payment','n',14],['Tanggal Pay','d',11],['REK','t',9],['Ket Tf','t',12],['STATUS','t',9],['Jadwal pay','d',11],['Tanggal kirim','d',11],['Tanggal Pasang','d',11],['A/R','n',13],
+    ['Sales','t',10,1],['Alamat','t',26,1],['Discount','n',13,1]];
+  const build=(title,cols,rows)=>{
+    const ws={}; const put=(r,c,cell)=>{ ws[XLSX.utils.encode_cell({r,c})]=cell; };
+    put(0,0,{t:'s',v:title,s:sTitle});
+    put(1,0,{t:'s',v:'Baris dengan No. berisi teks "CONTOH" tidak ikut diimport — boleh dihapus.',s:{font:{name:F,sz:9,italic:true,color:{rgb:'888888'}},alignment:{horizontal:'center'}}});
+    cols.forEach((c,ci)=>put(2,ci,{t:'s',v:c[0],s:sHead(c[3])}));
+    rows.forEach((row,ri)=>cols.forEach((c,ci)=>{
+      const v=row[c[0]];
+      // Kolom pembayaran (Payment I.., Tanggal Pay) pakai format tanggal dd/mm/yyyy
+      const isPay=/^payment |^tanggal pay$/i.test(c[0]);
+      const cell= v===undefined||v===''? {t:'s',v:'',s:isPay&&c[1]==='d'?sDatePay:sTxt}
+        : ((c[1]==='d'||isPay)&&/^\d{4}-\d{2}-\d{2}$/.test(v)) ? (isPay ? {t:'n',v:excelSerial_(v),z:'dd/mm/yyyy',s:sDatePay} : {t:'n',v:excelSerial_(v),z:'d-mmm-yy',s:sDate})
+        : (c[1]==='n'&&typeof v==='number') ? {t:'n',v,s:sNum} : {t:'s',v:String(v),s:sTxt};
+      put(3+ri,ci,cell);
+    }));
+    ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:2+Math.max(rows.length,1),c:cols.length-1}});
+    ws['!cols']=cols.map(c=>({wch:c[2]}));
+    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:cols.length-1}},{s:{r:1,c:0},e:{r:1,c:cols.length-1}}];
+    ws['!rows']=[{hpt:22},{hpt:14},{hpt:30}];
     return ws;
   };
-  const trx=[
-    {kode:'CONTOH-1',jenis:'Mesin',sales:salesContoh,customer:'PT. Contoh Maju',pic:'Bpk. Andi',alamat:'Jl. Industri No. 1, Cikarang',noPO:'PO-001',tglPO:'2026-01-05',noInv:'001/DPM/2026',tglInv:'2026-01-10',ppn:215600000,discount:60000000,status:'BELUM LUNAS',tglKirim:'2026-01-20',tglSetup:'2026-01-25',ket:'Contoh — baris ini tidak ikut diimport'},
-    {kode:'CONTOH-2',jenis:'Sparepart',sales:'',customer:'CV. Contoh Jaya',pic:'Ibu Sari',alamat:'Jl. Raya No. 2, Bekasi',noInv:'S-010/2026',tglInv:'2026-02-03',picHandled:'Budi',ppn:110000,status:'LUNAS',tglKirim:'2026-02-05',ket:'Contoh — sales kosong = pakai Sales default'}
+  const salesContoh=(db.sales[0]&&db.sales[0].nama)||'';
+  const mesinRows=[
+    {'No.':'CONTOH','Tanggal PO':'2025-12-13','Sales':salesContoh,'Customer':'PT. Contoh Maju','PIC':'Ibu Contoh','NAMA BARANG':'DARDONTECH D-ER300 CNC TURRET PUNCHING MACHINE','QTY':1,'DPP':1960000000,'PPN':215600000,'TOTAL':2175600000,
+     'Payment I':197580000,'Payment II':197580000,'Payment III':1780440000,'STATUS':'LUNAS','Tanggal Lunas':'2025-06-12','Tanggal kirim':'2025-04-23','Jenis':'Mesin','A/R':0},
+    {'Payment I':'2024-12-13','Payment II':'2025-01-31','Payment III':'2025-06-12'},
+    {'Payment I':'an CONTOH','Payment II':'an CONTOH','Payment III':'BFI'}
   ];
-  const items=[
-    {kode:'CONTOH-1',barang:'DARDONTECH D-ER300 CNC',qty:1,harga:1960000000,seri:'SN-12345'},
-    {kode:'CONTOH-2',barang:'Bearing 6205',qty:4,harga:150000},
-    {kode:'CONTOH-2',barang:'Jasa Pemasangan',qty:1,harga:400000}
-  ];
-  const pays=[
-    {kode:'CONTOH-1',jenis:'DP',noInv:'001/DPM/2026',tgl:'2026-01-10',jumlah:500000000,rek:'Delta Prima BCA'},
-    {kode:'CONTOH-1',jenis:'Pembayaran',noInv:'010/DPM/2026',tgl:'2026-02-10',jumlah:800000000,rek:'Delta Prima BCA'},
-    {kode:'CONTOH-2',jenis:'Pembayaran',noInv:'S-010/2026',tgl:'2026-02-10',jumlah:1110000,rek:'Delta Prima BCA',ket:'Lunas'}
+  const spareRows=[
+    {'No.':'CONTOH','Tanggal PO':'2025-08-19','NO INV':'366/VIII/DPM/2025','TANGGAL INV':'2025-08-21','FP':'DONE','PIC Handled':'Ashley','CUST':'PT. Contoh Jaya','PIC':'Bp Contoh','NAMA BARANG':'NOZZLE HSG DOUBLE [1.2MM]','JENIS':'Sparepart','QTY':6,'No. Seri':'WPCT','HARGA PER PC':350000,'DPP':2100000,'PPN':231000,'TOTAL':2331000,
+     'Detail Payment':3496500,'Tanggal Pay':'2025-08-21','REK':'delta','Ket Tf':'an. CONTOH','STATUS':'LUNAS','Tanggal kirim':'2025-08-22','A/R':0},
+    {'NAMA BARANG':'NOZZLE HSG DOUBLE [1.4MM]','JENIS':'Sparepart','QTY':3,'No. Seri':'WPCT','HARGA PER PC':350000,'DPP':1050000,'PPN':115500,'TOTAL':1165500}
   ];
   const help=[
-    ['PETUNJUK IMPORT — AR Management'],[''],
-    ['1. Isi 3 sheet: Transaksi, Barang, dan Pembayaran. Ketiganya dihubungkan oleh kolom "Kode Transaksi".'],
-    ['2. Kode Transaksi bebas (misal T001, T002), asal unik per transaksi. Kode ini hanya untuk menghubungkan sheet, tidak disimpan di aplikasi.'],
-    ['3. Kolom bertanda * (judul biru tua) wajib diisi. Jangan ubah judul kolom dan nama sheet.'],
-    ['4. Baris dengan Kode Transaksi berawalan "CONTOH" tidak ikut diimport. Boleh dihapus atau dibiarkan.'],
+    ['PETUNJUK IMPORT — format rekap AR'],[''],
+    ['Isi seperti rekap AR biasa. Sheet "Mesin" untuk penjualan mesin, sheet "Sparepart" untuk sparepart & jasa. Boleh isi salah satu saja.'],
+    ['Kolom berjudul kuning = kolom rekap AR biasa. Kolom berjudul abu-abu di paling kanan = tambahan (boleh dikosongkan / dihapus).'],
+    ['Baris judul (No., Tanggal PO, ...) jangan diubah namanya. Urutan kolom boleh berbeda. Kolom rumus (PPN, TOTAL, dll.) boleh tetap rumus.'],
     [''],
-    ['SHEET TRANSAKSI (1 baris = 1 transaksi)'],
-    ['• Jenis: Mesin, Sparepart, atau Jasa.'],
-    ['• Sales: nama sales persis seperti di aplikasi. Kalau kosong, dipakai "Sales default" yang dipilih saat import.'],
-    ['• PIC Handled dan Jadwal Pay hanya untuk Sparepart/Jasa. Tgl Lunas hanya untuk Mesin. Tgl Setup/Pasang = Tgl Setup (Mesin) atau Tgl Pasang (Sparepart/Jasa).'],
-    ['• Status: LUNAS, BELUM LUNAS, atau PROGRESS. Kalau kosong: LUNAS jika total pembayaran ≥ Total, selain itu BELUM LUNAS.'],
-    ['• A/R: kalau kosong, dihitung otomatis = Total − jumlah semua pembayaran.'],
-    ['• DPP dan Total TIDAK perlu diisi: DPP = jumlah (Qty × Harga/Unit) dari sheet Barang, Total = DPP − Discount + PPN.'],
+    ['SHEET MESIN'],
+    ['• 1 transaksi = 1 baris yang kolom No.-nya berisi angka, ditambah baris-baris di bawahnya (No. kosong) sampai transaksi berikutnya.'],
+    ['• Kolom Payment I, II, ...: baris pertama = jumlah bayar, baris kedua = tanggal bayar, baris ketiga = keterangan transfer (rekening / a.n.).'],
+    ['• Payment I menjadi "Pembayaran 1" di aplikasi, Payment II "Pembayaran 2", dst.'],
+    ['• Kalau TOTAL lebih kecil dari DPP + PPN, selisihnya dianggap Discount.'],
+    ['• Nama Sales boleh tanpa sapaan: "Edi" akan dicocokkan ke sales "P\'Edi" di aplikasi.'],
     [''],
-    ['SHEET BARANG (1 baris = 1 barang, boleh beberapa baris untuk 1 transaksi)'],
-    ['• Setiap transaksi wajib punya minimal 1 barang. Urutan baris = urutan di invoice.'],
-    ['• Foto No. Seri tidak bisa diimport. Untuk Mesin, foto wajib diupload saat transaksi diedit dan disimpan lagi di aplikasi.'],
+    ['SHEET SPAREPART'],
+    ['• Baris dengan No. berisi angka = transaksi baru + barang pertamanya. Baris di bawahnya dengan No. kosong = barang berikutnya dari transaksi yang sama.'],
+    ['• Detail Payment, Tanggal Pay, REK, dan Ket Tf di baris pertama = pembayaran transaksi itu. Kalau ada pembayaran kedua, isi di baris berikutnya pada kolom yang sama.'],
+    ['• Kolom FP disimpan ke Keterangan transaksi (contoh: "FP: DONE").'],
+    ['• Sheet ini tidak punya kolom Sales, jadi transaksinya masuk ke "Sales Default" yang dipilih saat import (atau isi kolom tambahan Sales).'],
     [''],
-    ['SHEET PEMBAYARAN (1 baris = 1 pembayaran, urut dari yang pertama)'],
-    ['• Jenis: isi DP hanya untuk pembayaran PERTAMA kalau itu DP. Selain itu isi "Pembayaran" atau kosongkan.'],
-    ['• Label dibuat otomatis: DP, Pembayaran 1, Pembayaran 2, dst. sesuai urutan baris per transaksi.'],
-    ['• Transaksi tanpa pembayaran tidak perlu diisi di sheet ini.'],
-    [''],
-    ['FORMAT ANGKA & TANGGAL'],
-    ['• Angka diisi tanpa titik/Rp (contoh 1960000000), atau angka biasa yang diformat Excel.'],
-    ['• Tanggal diisi dd/mm/yyyy (contoh 13/12/2024). Cek setelah mengetik bahwa Excel tidak membaliknya menjadi bulan/tanggal.']
+    ['UMUM'],
+    ['• Status kosong: otomatis LUNAS kalau total pembayaran ≥ TOTAL. A/R kosong: otomatis TOTAL − total pembayaran.'],
+    ['• No Invoice per pembayaran tidak ada di rekap AR, jadi bisa dilengkapi nanti lewat Edit di aplikasi.'],
+    ['• Foto No. Seri tidak bisa diimport; untuk Mesin, foto diminta saat transaksi diedit lalu disimpan.']
   ];
   const wsHelp=XLSX.utils.aoa_to_sheet(help);
-  wsHelp['A1'].s={font:{name:F,sz:13,bold:true,color:{rgb:'1A3A5C'}}};
-  help.forEach((r,i)=>{ if(i>0&&/^[A-Z][A-Z &]+(\(|$)/.test(r[0])) wsHelp[XLSX.utils.encode_cell({r:i,c:0})].s={font:{name:F,sz:11,bold:true,color:{rgb:'1A3A5C'}}}; });
-  wsHelp['!cols']=[{wch:120}];
+  wsHelp['A1'].s={font:{name:F,sz:13,bold:true}};
+  help.forEach((r,i)=>{ if(i>0&&/^(SHEET|UMUM)/.test(r[0])) wsHelp[XLSX.utils.encode_cell({r:i,c:0})].s={font:{name:F,sz:11,bold:true}}; });
+  wsHelp['!cols']=[{wch:130}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,buildSheet(IMP_TRX_COLS,trx),'Transaksi');
-  XLSX.utils.book_append_sheet(wb,buildSheet(IMP_ITEM_COLS,items),'Barang');
-  XLSX.utils.book_append_sheet(wb,buildSheet(IMP_PAY_COLS,pays),'Pembayaran');
+  XLSX.utils.book_append_sheet(wb,build('REKAPITULASI PENJUALAN MESIN',mesinCols,mesinRows),'Mesin');
+  XLSX.utils.book_append_sheet(wb,build('REKAPITULASI PENJUALAN SPAREPARTS & JASA',spareCols,spareRows),'Sparepart');
   XLSX.utils.book_append_sheet(wb,wsHelp,'Petunjuk');
-  XLSX.writeFile(wb,'Format_Import_AR_Management.xlsx');
+  XLSX.writeFile(wb,'Format_Import_Rekap_AR.xlsx');
   toast('Format Excel berhasil diunduh');
+}
+
+// ── BACA FORMAT REKAP AR (sheet Mesin / Sparepart) ──────
+const AR_ALIASES={
+  no:['no'], tglPO:['tanggal po','tgl po'], sales:['sales'], customer:['customer','cust'], pic:['pic','pic cust'],
+  barang:['nama barang'], jenis:['jenis'], qty:['qty'], seri:['no seri'], harga:['harga per pc','harga/pc','harga pc','harga/unit','harga'],
+  dpp:['dpp'], ppn:['ppn'], total:['total'], status:['status'], tglLunas:['tanggal lunas','tgl lunas'], ket:['ket','keterangan'],
+  tglKirim:['tanggal kirim','tgl kirim'], tglSetup:['tanggal set up','tanggal setup','tgl setup','tgl set up'], tglPasang:['tanggal pasang','tgl pasang'],
+  ar:['a/r','ar'], noPO:['no po'], noInv:['no inv','no invoice'], tglInv:['tanggal inv','tgl inv','tanggal invoice'], fp:['fp'],
+  picHandled:['pic handled'], alamat:['alamat','alamat customer'], discount:['discount','diskon'],
+  payJumlah:['detail payment','jumlah (rp)','jumlah','payment'], payTgl:['tanggal pay','tgl pay'], payRek:['rek','rekening'], payKet:['ket tf'],
+  jadwalPay:['jadwal pay']
+};
+function romanToInt_(s){
+  const v={i:1,v:5,x:10,l:50,c:100,d:500,m:1000}; let t=0;
+  s=String(s).toLowerCase();
+  for(let i=0;i<s.length;i++){ const a=v[s[i]], b=v[s[i+1]]||0; if(!a) return 0; t+= a<b ? -a : a; }
+  return t;
+}
+// "P'Edi", "Pak Edi", "Edi" -> "edi"
+function normSalesName_(s){
+  return String(s||'').toLowerCase().replace(/^(pak|bpk|bp|ibu|bu|p|b)\s*['’.]\s*|^(pak|bpk|bp|ibu|bu)\s+/,'').replace(/['’.\s]+/g,' ').trim();
+}
+function findSalesByName_(name){
+  const n=normSalesName_(name); if(!n) return null;
+  const hit=db.sales.filter(s=>normSalesName_(s.nama)===n);
+  return hit.length===1?hit[0]:null;
+}
+// Cari baris judul (yang berisi "NAMA BARANG") di 15 baris pertama
+function findArHeader_(rows){
+  for(let i=0;i<Math.min(rows.length,15);i++){
+    const h=(rows[i]||[]).map(normalizeHeader_);
+    if(h.includes('nama barang') && h.includes('no')) return {idx:i,h};
+  }
+  return null;
+}
+function parseImportAR_(wb){
+  let found=false;
+  wb.SheetNames.forEach(name=>{
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:''});
+    const hd=findArHeader_(rows); if(!hd) return;
+    const h=hd.h;
+    const col={}; Object.keys(AR_ALIASES).forEach(k=>{ col[k]=-1; for(const a of AR_ALIASES[k]){ const i=h.indexOf(a); if(i>-1){ col[k]=i; break; } } });
+    // Kolom Payment I, II, ... (format Mesin)
+    const payCols=[];
+    h.forEach((t,i)=>{ const m=/^(payment|pembayaran|pay)\s+([ivxlcdm]+|\d+)$/.exec(t); if(m) payCols.push({i,n:/^\d+$/.test(m[2])?+m[2]:romanToInt_(m[2])}); });
+    payCols.sort((a,b)=>a.n-b.n);
+    const isMesin = payCols.length>0 || /mesin/i.test(name);
+    found=true;
+    // Kelompokkan baris per transaksi
+    const blocks=[]; let cur=null, skipping=false;
+    for(let r=hd.idx+1;r<rows.length;r++){
+      const row=rows[r]||[]; if(row.every(v=>isBlank_(v))) continue;
+      const noV=getCell_(row,col.no);
+      const noNum= typeof noV==='number' || /^\d+$/.test(String(noV).trim());
+      if(!isBlank_(noV) && !noNum){ skipping=true; cur=null; continue; }   // CONTOH / TOTAL / teks lain
+      const start = noNum || (isBlank_(noV) && !isBlank_(getCell_(row,col.tglPO)) && !cur);
+      if(start){ skipping=false; cur={no:String(noV).trim(),rowNo:r+1,rows:[row]}; blocks.push(cur); }
+      else if(cur && !skipping) cur.rows.push(row);
+    }
+    blocks.forEach(b=>buildArTransaction_(b,col,payCols,isMesin,name));
+  });
+  return found;
+}
+function buildArTransaction_(b,col,payCols,isMesin,sheetName){
+  const R0=b.rows[0], g=(row,k)=>getCell_(row,col[k]);
+  const kode=`${sheetName} No.${b.no||'?'}`;
+  const where=`Sheet ${sheetName} baris ${b.rowNo} (No. ${b.no||'-'})`;
+  const customer=cleanTxt_(g(R0,'customer'));
+  if(!customer) importErrors.push(`${where}: Customer kosong.`);
+  // Barang: setiap baris dalam blok yang kolom NAMA BARANG-nya terisi
+  const items=[]; let sumDpp=0,sumPpn=0,sumTotal=0,hasTotal=false;
+  b.rows.forEach((row,ri)=>{
+    const barang=cleanTxt_(g(row,'barang'));
+    const seri=cleanTxt_(g(row,'seri'));
+    if(!barang){ // baris lanjutan tanpa barang: No. Seri tambahan untuk barang terakhir
+      if(seri && items.length){ const it=items[items.length-1]; if(!it.seri.split(', ').includes(seri)) it.seri=it.seri?it.seri+', '+seri:seri; }
+      return;
+    }
+    const qty=isBlank_(g(row,'qty'))?1:numOf_(g(row,'qty'));
+    const dppRow=numOf_(g(row,'dpp'));
+    let harga=col.harga>-1&&!isBlank_(g(row,'harga')) ? numOf_(g(row,'harga')) : (qty?dppRow/qty:0);
+    const dppItem=!isBlank_(g(row,'dpp')) ? dppRow : qty*harga;
+    if(!dppItem && ri>0) importWarnings.push(`${where}: barang "${barang}" tidak punya harga/DPP (dianggap 0).`);
+    items.push({barang,qty,harga,seri,jenis:cleanTxt_(g(row,'jenis'))});
+    sumDpp+=dppItem; sumPpn+=numOf_(g(row,'ppn'));
+    if(!isBlank_(g(row,'total'))){ sumTotal+=numOf_(g(row,'total')); hasTotal=true; }
+  });
+  if(!items.length){ importErrors.push(`${where}: NAMA BARANG kosong.`); return; }
+  // Pembayaran
+  const pays=[];
+  if(payCols.length){
+    payCols.forEach(pc=>{
+      const v=R0[pc.i]; if(isBlank_(v)||!numOf_(v)) return;
+      const r1=b.rows[1]?b.rows[1][pc.i]:'', r2=b.rows[2]?b.rows[2][pc.i]:'';
+      let tgl=excelDateToStr_(r1), rek=cleanTxt_(r2);
+      if(!tgl && !isBlank_(r1) && !rek) rek=cleanTxt_(r1);
+      pays.push({label:'',tgl,jumlah:numOf_(v),rek,ket:''});
+    });
+  } else if(col.payJumlah>-1){
+    b.rows.forEach(row=>{
+      const v=g(row,'payJumlah'); if(isBlank_(v)||!numOf_(v)) return;
+      pays.push({label:'',tgl:excelDateToStr_(g(row,'payTgl')),jumlah:numOf_(v),rek:cleanTxt_(g(row,'payRek')),ket:cleanTxt_(g(row,'payKet'))});
+    });
+  }
+  const payments=labelPayments_(pays);
+  const dpp=sumDpp, ppn=sumPpn;
+  let discount=numOf_(g(R0,'discount'));
+  if(!discount && hasTotal && dpp+ppn-sumTotal>=1) discount=Math.round(dpp+ppn-sumTotal);
+  const total=dpp-discount+ppn;
+  if(hasTotal && Math.abs(total-sumTotal)>=1) importWarnings.push(`${where}: TOTAL di Excel (${fmt(sumTotal)}) beda dengan DPP − Discount + PPN (${fmt(total)}). Dipakai ${fmt(total)}.`);
+  const paid=payments.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
+  const ar=isBlank_(g(R0,'ar'))?Math.max(0,total-paid):numOf_(g(R0,'ar'));
+  const status=isBlank_(g(R0,'status'))?((total>0&&paid>=total)?'LUNAS':'BELUM'):mapStatus_(g(R0,'status'));
+  // Sales
+  const salesNama=cleanTxt_(g(R0,'sales'));
+  let sales=null;
+  if(salesNama){ sales=findSalesByName_(salesNama); if(!sales) importWarnings.push(`${where}: Sales "${salesNama}" tidak ditemukan di aplikasi, masuk ke Sales Default.`); }
+  const noInv=cleanTxt_(g(R0,'noInv'));
+  const existingInv=new Set([...db.mesin,...db.spare].map(r=>String(r.noInv||'').trim().toLowerCase()).filter(Boolean));
+  if(noInv && existingInv.has(noInv.toLowerCase())) importWarnings.push(`${where}: No Invoice "${noInv}" sudah ada di aplikasi (mungkin duplikat).`);
+  if(paid>total && total>0) importWarnings.push(`${where}: jumlah pembayaran melebihi Total.`);
+  const fp=cleanTxt_(g(R0,'fp'));
+  const ket=[cleanTxt_(g(R0,'ket')), fp?'FP: '+fp:''].filter(Boolean).join(' — ');
+  const cleanItems=items.map(it=>({barang:it.barang,qty:it.qty,harga:it.harga,seri:it.seri}));
+  const common={
+    id:uid(), salesId:sales?sales.id:'', tglPO:excelDateToStr_(g(R0,'tglPO')), noPO:cleanTxt_(g(R0,'noPO')), noInv, tglInv:excelDateToStr_(g(R0,'tglInv')),
+    customer, pic:cleanTxt_(g(R0,'pic')), alamat:cleanTxt_(g(R0,'alamat')),
+    barang:cleanItems.map(it=>it.barang).join(', '), qty:cleanItems.reduce((a,it)=>a+it.qty,0),
+    seri:cleanItems.map(it=>it.seri).filter(Boolean).join(', '),
+    items:cleanItems, dpp, ppn, discount, total, status, ket, tglKirim:excelDateToStr_(g(R0,'tglKirim')), ar, payments
+  };
+  let rec, type;
+  if(isMesin){
+    type='mesin';
+    rec={...common, sales:sales?sales.nama:'', tglLunas:excelDateToStr_(g(R0,'tglLunas')), tglSetup:excelDateToStr_(g(R0,'tglSetup')), jenis:'Mesin'};
+  } else {
+    type='spare';
+    const jenis=items.every(it=>/^jasa$/i.test(it.jenis))?'Jasa':'Sparepart';
+    rec={...common, picHandled:cleanTxt_(g(R0,'picHandled')), jenis, harga:cleanItems[0].harga, jadwalPay:excelDateToStr_(g(R0,'jadwalPay')), tglPasang:excelDateToStr_(g(R0,'tglPasang'))};
+  }
+  importParsedRows.push({type, rec, kode, salesNama:sales?sales.nama:'', needDefaultSales:!sales});
 }
 
 // ── BACA FILE ───────────────────────────────────────────
@@ -2090,7 +2243,10 @@ function handleImportFile(input){
       };
       const trxRows=sheetOf('transaksi');
       importParsedRows=[]; importErrors=[]; importWarnings=[]; importInfo={};
-      if(trxRows) parseImportNew_(trxRows, sheetOf('barang')||[], sheetOf('pembayaran')||[]);
+      if(trxRows) parseImportNew_(trxRows, sheetOf('barang')||[], sheetOf('pembayaran')||[]);   // format 3 sheet (versi sebelumnya)
+      else if(parseImportAR_(wb)){                                                              // format rekap AR (Mesin / Sparepart)
+        importInfo={items:importParsedRows.reduce((a,x)=>a+x.rec.items.length,0), pays:importParsedRows.reduce((a,x)=>a+x.rec.payments.length,0)};
+      }
       else parseImportLegacy_(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}));
       renderImportPreview();
     }catch(err){
@@ -2281,7 +2437,7 @@ function renderImportPreview(){
   <table class="pay-list"><thead><tr><th>Kode</th><th>Jenis</th><th>Sales</th><th>Customer</th><th>Barang</th><th>Total</th><th>Dibayar</th><th>Status</th></tr></thead><tbody>`;
   importParsedRows.slice(0,50).forEach(x=>{
     const r=x.rec, paid=(r.payments||[]).reduce((a,p)=>a+(Number(p.jumlah)||0),0);
-    h+=`<tr><td>${esc(x.kode)}</td><td>${esc(r.jenis)}</td><td>${esc(x.salesNama)||'<i style="color:#999">default</i>'}</td><td>${esc(r.customer)||'-'}</td><td>${esc(r.barang)}</td><td>${fmt(r.total)}</td><td>${fmt(paid)}</td><td>${r.status==='BELUM'?'BELUM LUNAS':r.status}</td></tr>`;
+    h+=`<tr><td>${esc(x.kode)}</td><td>${esc(r.jenis)}</td><td>${esc(x.salesNama)||'<i style="color:#999">default</i>'}</td><td>${esc(r.customer)||'-'}</td><td>${esc((r.items&&r.items[0]&&r.items[0].barang)||r.barang)}${r.items&&r.items.length>1?` <span style="color:#888">(+${r.items.length-1} barang)</span>`:''}</td><td>${fmt(r.total)}</td><td>${fmt(paid)}</td><td>${r.status==='BELUM'?'BELUM LUNAS':r.status}</td></tr>`;
   });
   h+=`</tbody></table></div>`;
   if(importParsedRows.length>50) h+=`<p style="font-size:11px;color:#999;margin-top:4px">Menampilkan 50 dari ${importParsedRows.length} transaksi.</p>`;
