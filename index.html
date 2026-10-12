@@ -571,14 +571,12 @@ tbody td{padding:8px 11px;vertical-align:top;}
     <div class="modal-header"><h3>📥 Import Data dari Excel</h3><button class="modal-close" onclick="closeModal('modal-import')">×</button></div>
     <div class="modal-body">
       <div class="form-grid">
-        <div class="form-group full">
-          <label>Jenis Data</label>
-          <select id="imp-jenis">
-            <option value="spare">Sparepart & Jasa</option>
-          </select>
+        <div class="form-group full" style="background:#f3f8fd;border:1px solid #d6e6f5;border-radius:8px;padding:10px 12px">
+          <p style="font-size:12px;color:var(--text);margin-bottom:8px">Bisa import Mesin dan Sparepart/Jasa sekaligus, lengkap dengan banyak barang dan History Pembayaran. Unduh formatnya dulu, isi, lalu pilih filenya di bawah.</p>
+          <button type="button" class="btn btn-outline" style="font-size:11px;width:auto;align-self:flex-start" onclick="downloadImportTemplate()">⬇️ Unduh Format Excel</button>
         </div>
         <div class="form-group full">
-          <label>Sales Tujuan (semua baris akan masuk ke sales ini)</label>
+          <label>Sales Default (untuk transaksi yang kolom Sales-nya kosong)</label>
           <select id="imp-sales"></select>
         </div>
         <div class="form-group full">
@@ -1760,12 +1758,59 @@ async function deleteSpare(id){
 
 
 // ═══════════════════════════════════════════════════════
-// IMPORT DARI EXCEL (rekap lama)
+// IMPORT DARI EXCEL
+// Format baru (tombol "Unduh Format Excel"): 3 sheet yang saling terhubung
+// lewat kolom "Kode Transaksi":
+//   - Transaksi  : 1 baris = 1 transaksi (Mesin / Sparepart / Jasa)
+//   - Barang     : 1 baris = 1 barang (boleh banyak barang per transaksi)
+//   - Pembayaran : 1 baris = 1 pembayaran (DP, Pembayaran 1, 2, ...)
+// DPP dihitung dari Barang, Total = DPP - Discount + PPN (sama seperti form).
+// Baris dengan Kode Transaksi berawalan "CONTOH" dilewati.
+// File lama (1 sheet rekap Sparepart) masih bisa diimport seperti dulu.
 // ═══════════════════════════════════════════════════════
-let importParsedRows = [];
+let importParsedRows = [];   // [{type:'mesin'|'spare', rec:{...}, needDefaultSales:bool, kode, salesNama}]
+let importErrors = [], importWarnings = [], importInfo = {};
 
-// Alias nama kolom (header di-normalisasi: lowercase, spasi dirapikan, tanpa titik)
-// supaya import tetap jalan walau penulisan header sedikit berbeda antar file.
+const IMP_TRX_COLS = [
+  {key:'kode',      h:'Kode Transaksi*', w:16, req:true},
+  {key:'jenis',     h:'Jenis*',          w:11, req:true},
+  {key:'sales',     h:'Sales',           w:14},
+  {key:'customer',  h:'Customer*',       w:24, req:true},
+  {key:'pic',       h:'PIC',             w:16},
+  {key:'alamat',    h:'Alamat',          w:32},
+  {key:'noPO',      h:'No PO',           w:14},
+  {key:'tglPO',     h:'Tgl PO',          w:12, date:true},
+  {key:'noInv',     h:'No Invoice',      w:16},
+  {key:'tglInv',    h:'Tgl Invoice',     w:12, date:true},
+  {key:'picHandled',h:'PIC Handled',     w:14},
+  {key:'ppn',       h:'PPN',             w:15, num:true},
+  {key:'discount',  h:'Discount',        w:14, num:true},
+  {key:'status',    h:'Status',          w:13},
+  {key:'tglLunas',  h:'Tgl Lunas',       w:12, date:true},
+  {key:'jadwalPay', h:'Jadwal Pay',      w:12, date:true},
+  {key:'tglKirim',  h:'Tgl Kirim',       w:12, date:true},
+  {key:'tglSetup',  h:'Tgl Setup/Pasang',w:16, date:true},
+  {key:'ar',        h:'A/R',             w:15, num:true},
+  {key:'ket',       h:'Keterangan',      w:24}
+];
+const IMP_ITEM_COLS = [
+  {key:'kode',   h:'Kode Transaksi*', w:16, req:true},
+  {key:'barang', h:'Nama Barang*',    w:34, req:true},
+  {key:'qty',    h:'Qty*',            w:7,  req:true, num:true},
+  {key:'harga',  h:'Harga/Unit*',     w:16, req:true, num:true},
+  {key:'seri',   h:'No Seri',         w:16}
+];
+const IMP_PAY_COLS = [
+  {key:'kode',   h:'Kode Transaksi*', w:16, req:true},
+  {key:'jenis',  h:'Jenis',           w:12},
+  {key:'noInv',  h:'No Invoice',      w:16},
+  {key:'tgl',    h:'Tanggal',         w:12, date:true},
+  {key:'jumlah', h:'Jumlah*',         w:16, req:true, num:true},
+  {key:'rek',    h:'Rekening',        w:18},
+  {key:'ket',    h:'Keterangan',      w:22}
+];
+
+// Alias kolom untuk file rekap lama (1 sheet, khusus Sparepart)
 const IMPORT_SPARE_COL_ALIASES = {
   tglPO: ['tanggal po'],
   noPO: ['no po'],
@@ -1797,6 +1842,10 @@ const IMPORT_SPARE_COL_ALIASES = {
 function normalizeHeader_(h){
   return String(h||'').trim().toLowerCase().replace(/\./g,'').replace(/\s+/g,' ');
 }
+// Untuk format baru: abaikan tanda * dan keterangan dalam kurung
+function normalizeImpHeader_(h){
+  return normalizeHeader_(String(h||'').replace(/\*/g,'').replace(/\(.*?\)/g,''));
+}
 function buildHeaderMap_(headerRow){
   const map={};
   headerRow.forEach((h,i)=>{ map[normalizeHeader_(h)] = i; });
@@ -1812,26 +1861,40 @@ function cleanTxt_(v){
   const s=String(v).trim();
   return (s==='-') ? '' : s;
 }
+// Angka dari Excel: bisa angka asli, atau teks seperti "Rp 1.960.000.000"
 function numOf_(v){
-  if(typeof v==='string') v=v.replace(/[^0-9.-]/g,'');
-  const n=Number(v);
+  if(typeof v==='number') return isFinite(v)?v:0;
+  let s=String(v==null?'':v).trim();
+  if(!s||s==='-') return 0;
+  s=s.replace(/rp\.?/ig,'').replace(/\s/g,'');
+  if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(s)) s=s.replace(/\./g,'').replace(',','.');
+  else if(/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(s)) s=s.replace(/,/g,'');
+  else s=s.replace(',','.');
+  const n=Number(s.replace(/[^0-9.-]/g,''));
   return isNaN(n)?0:n;
 }
+function isBlank_(v){ return v===undefined||v===null||String(v).trim()===''; }
 function mapStatus_(v){
   const s=String(v||'').trim().toUpperCase();
   if(s==='LUNAS') return 'LUNAS';
   if(s==='PROGRESS') return 'PROGRESS';
   return 'BELUM';
 }
+// Tanggal dari Excel: angka tanggal Excel, atau teks dd/mm/yyyy / yyyy-mm-dd
 function excelDateToStr_(val){
+  const pad=n=>String(n).padStart(2,'0');
   if(val instanceof Date && !isNaN(val)){
-    const y=val.getFullYear(), m=String(val.getMonth()+1).padStart(2,'0'), d=String(val.getDate()).padStart(2,'0');
-    return `${y}-${m}-${d}`;
+    return `${val.getFullYear()}-${pad(val.getMonth()+1)}-${pad(val.getDate())}`;
   }
   if(typeof val==='number' && window.XLSX && XLSX.SSF){
     const d=XLSX.SSF.parse_date_code(val);
-    if(d) return `${d.y}-${String(d.m).padStart(2,'0')}-${String(d.d).padStart(2,'0')}`;
+    if(d) return `${d.y}-${pad(d.m)}-${pad(d.d)}`;
   }
+  const s=String(val==null?'':val).trim();
+  let m=/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/.exec(s);
+  if(m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+  m=/^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if(m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
   return '';
 }
 
@@ -1847,73 +1910,115 @@ function openImportModal(){
   document.getElementById('imp-file').value='';
   document.getElementById('imp-preview').innerHTML='';
   document.getElementById('imp-confirm-btn').style.display='none';
-  importParsedRows=[];
+  importParsedRows=[]; importErrors=[]; importWarnings=[]; importInfo={};
   openModal('modal-import');
 }
 
+// ── UNDUH FORMAT EXCEL ──────────────────────────────────
+function excelSerial_(iso){
+  const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? (Date.UTC(+m[1],+m[2]-1,+m[3])-Date.UTC(1899,11,30))/86400000 : 0;
+}
+function downloadImportTemplate(){
+  if(typeof XLSX==='undefined'){ toast('Komponen Excel belum termuat, cek koneksi internet','error'); return; }
+  const F='Calibri';
+  const bd={top:{style:'thin',color:{rgb:'BFC7D5'}},bottom:{style:'thin',color:{rgb:'BFC7D5'}},left:{style:'thin',color:{rgb:'BFC7D5'}},right:{style:'thin',color:{rgb:'BFC7D5'}}};
+  const sHead=req=>({font:{name:F,sz:10,bold:true,color:{rgb:'FFFFFF'}},fill:{fgColor:{rgb:req?'1A3A5C':'5B7590'}},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bd});
+  const sTxt={font:{name:F,sz:10,color:{rgb:'7A8699'},italic:true},border:bd,alignment:{vertical:'top',wrapText:true}};
+  const sNum={...sTxt,numFmt:'#,##0',alignment:{horizontal:'right',vertical:'top'}};
+  const sDate={...sTxt,numFmt:'dd/mm/yyyy',alignment:{horizontal:'center',vertical:'top'}};
+  const salesContoh=(db.sales[0]&&db.sales[0].nama)||'';
+  const buildSheet=(cols,rows)=>{
+    const ws={};
+    cols.forEach((c,ci)=>{ ws[XLSX.utils.encode_cell({r:0,c:ci})]={t:'s',v:c.h,s:sHead(c.req)}; });
+    rows.forEach((row,ri)=>{
+      cols.forEach((c,ci)=>{
+        const v=row[c.key]; const addr=XLSX.utils.encode_cell({r:ri+1,c:ci});
+        if(v===undefined||v===''){ ws[addr]={t:'s',v:'',s:sTxt}; return; }
+        if(c.date) ws[addr]={t:'n',v:excelSerial_(v),z:'dd/mm/yyyy',s:sDate};
+        else if(c.num) ws[addr]={t:'n',v:Number(v),s:sNum};
+        else ws[addr]={t:'s',v:String(v),s:sTxt};
+      });
+    });
+    ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(rows.length,1),c:cols.length-1}});
+    ws['!cols']=cols.map(c=>({wch:c.w}));
+    ws['!rows']=[{hpt:30}];
+    ws['!freeze']={xSplit:0,ySplit:1};
+    return ws;
+  };
+  const trx=[
+    {kode:'CONTOH-1',jenis:'Mesin',sales:salesContoh,customer:'PT. Contoh Maju',pic:'Bpk. Andi',alamat:'Jl. Industri No. 1, Cikarang',noPO:'PO-001',tglPO:'2026-01-05',noInv:'001/DPM/2026',tglInv:'2026-01-10',ppn:215600000,discount:60000000,status:'BELUM LUNAS',tglKirim:'2026-01-20',tglSetup:'2026-01-25',ket:'Contoh — baris ini tidak ikut diimport'},
+    {kode:'CONTOH-2',jenis:'Sparepart',sales:'',customer:'CV. Contoh Jaya',pic:'Ibu Sari',alamat:'Jl. Raya No. 2, Bekasi',noInv:'S-010/2026',tglInv:'2026-02-03',picHandled:'Budi',ppn:110000,status:'LUNAS',tglKirim:'2026-02-05',ket:'Contoh — sales kosong = pakai Sales default'}
+  ];
+  const items=[
+    {kode:'CONTOH-1',barang:'DARDONTECH D-ER300 CNC',qty:1,harga:1960000000,seri:'SN-12345'},
+    {kode:'CONTOH-2',barang:'Bearing 6205',qty:4,harga:150000},
+    {kode:'CONTOH-2',barang:'Jasa Pemasangan',qty:1,harga:400000}
+  ];
+  const pays=[
+    {kode:'CONTOH-1',jenis:'DP',noInv:'001/DPM/2026',tgl:'2026-01-10',jumlah:500000000,rek:'Delta Prima BCA'},
+    {kode:'CONTOH-1',jenis:'Pembayaran',noInv:'010/DPM/2026',tgl:'2026-02-10',jumlah:800000000,rek:'Delta Prima BCA'},
+    {kode:'CONTOH-2',jenis:'Pembayaran',noInv:'S-010/2026',tgl:'2026-02-10',jumlah:1110000,rek:'Delta Prima BCA',ket:'Lunas'}
+  ];
+  const help=[
+    ['PETUNJUK IMPORT — AR Management'],[''],
+    ['1. Isi 3 sheet: Transaksi, Barang, dan Pembayaran. Ketiganya dihubungkan oleh kolom "Kode Transaksi".'],
+    ['2. Kode Transaksi bebas (misal T001, T002), asal unik per transaksi. Kode ini hanya untuk menghubungkan sheet, tidak disimpan di aplikasi.'],
+    ['3. Kolom bertanda * (judul biru tua) wajib diisi. Jangan ubah judul kolom dan nama sheet.'],
+    ['4. Baris dengan Kode Transaksi berawalan "CONTOH" tidak ikut diimport. Boleh dihapus atau dibiarkan.'],
+    [''],
+    ['SHEET TRANSAKSI (1 baris = 1 transaksi)'],
+    ['• Jenis: Mesin, Sparepart, atau Jasa.'],
+    ['• Sales: nama sales persis seperti di aplikasi. Kalau kosong, dipakai "Sales default" yang dipilih saat import.'],
+    ['• PIC Handled dan Jadwal Pay hanya untuk Sparepart/Jasa. Tgl Lunas hanya untuk Mesin. Tgl Setup/Pasang = Tgl Setup (Mesin) atau Tgl Pasang (Sparepart/Jasa).'],
+    ['• Status: LUNAS, BELUM LUNAS, atau PROGRESS. Kalau kosong: LUNAS jika total pembayaran ≥ Total, selain itu BELUM LUNAS.'],
+    ['• A/R: kalau kosong, dihitung otomatis = Total − jumlah semua pembayaran.'],
+    ['• DPP dan Total TIDAK perlu diisi: DPP = jumlah (Qty × Harga/Unit) dari sheet Barang, Total = DPP − Discount + PPN.'],
+    [''],
+    ['SHEET BARANG (1 baris = 1 barang, boleh beberapa baris untuk 1 transaksi)'],
+    ['• Setiap transaksi wajib punya minimal 1 barang. Urutan baris = urutan di invoice.'],
+    ['• Foto No. Seri tidak bisa diimport. Untuk Mesin, foto wajib diupload saat transaksi diedit dan disimpan lagi di aplikasi.'],
+    [''],
+    ['SHEET PEMBAYARAN (1 baris = 1 pembayaran, urut dari yang pertama)'],
+    ['• Jenis: isi DP hanya untuk pembayaran PERTAMA kalau itu DP. Selain itu isi "Pembayaran" atau kosongkan.'],
+    ['• Label dibuat otomatis: DP, Pembayaran 1, Pembayaran 2, dst. sesuai urutan baris per transaksi.'],
+    ['• Transaksi tanpa pembayaran tidak perlu diisi di sheet ini.'],
+    [''],
+    ['FORMAT ANGKA & TANGGAL'],
+    ['• Angka diisi tanpa titik/Rp (contoh 1960000000), atau angka biasa yang diformat Excel.'],
+    ['• Tanggal diisi dd/mm/yyyy (contoh 13/12/2024). Cek setelah mengetik bahwa Excel tidak membaliknya menjadi bulan/tanggal.']
+  ];
+  const wsHelp=XLSX.utils.aoa_to_sheet(help);
+  wsHelp['A1'].s={font:{name:F,sz:13,bold:true,color:{rgb:'1A3A5C'}}};
+  help.forEach((r,i)=>{ if(i>0&&/^[A-Z][A-Z &]+(\(|$)/.test(r[0])) wsHelp[XLSX.utils.encode_cell({r:i,c:0})].s={font:{name:F,sz:11,bold:true,color:{rgb:'1A3A5C'}}}; });
+  wsHelp['!cols']=[{wch:120}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,buildSheet(IMP_TRX_COLS,trx),'Transaksi');
+  XLSX.utils.book_append_sheet(wb,buildSheet(IMP_ITEM_COLS,items),'Barang');
+  XLSX.utils.book_append_sheet(wb,buildSheet(IMP_PAY_COLS,pays),'Pembayaran');
+  XLSX.utils.book_append_sheet(wb,wsHelp,'Petunjuk');
+  XLSX.writeFile(wb,'Format_Import_AR_Management.xlsx');
+  toast('Format Excel berhasil diunduh');
+}
+
+// ── BACA FILE ───────────────────────────────────────────
 function handleImportFile(input){
   const file=input.files[0]; if(!file) return;
   const reader=new FileReader();
   reader.onload=(e)=>{
     try{
       const data=new Uint8Array(e.target.result);
-      const wb=XLSX.read(data,{type:'array',cellDates:true});
-      const ws=wb.Sheets[wb.SheetNames[0]];
-      const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
-      if(!rows.length){ toast('File Excel kosong','error'); return; }
-
-      const headerMap=buildHeaderMap_(rows[0]);
-      const col={};
-      Object.keys(IMPORT_SPARE_COL_ALIASES).forEach(k=>{ col[k]=findCol_(headerMap, IMPORT_SPARE_COL_ALIASES[k]); });
-
-      if(col.barang===-1){
-        toast('Kolom "NAMA BARANG" tidak ditemukan — cek format header di file ini','error');
-        return;
-      }
-
-      const parsed=[];
-      for(let i=1;i<rows.length;i++){
-        const r=rows[i];
-        if(!r || r.every(c=>c===''||c===null||c===undefined)) continue;
-        const barang=cleanTxt_(getCell_(r,col.barang));
-        if(!barang) continue; // lewati baris kosong/subtotal
-
-        const excelKet=cleanTxt_(getCell_(r,col.ket));
-        const excelJadwal=cleanTxt_(getCell_(r,col.jadwalPay));
-        const ketParts=[]; if(excelKet) ketParts.push(excelKet); if(excelJadwal) ketParts.push(excelJadwal);
-        const jumlahPay=numOf_(getCell_(r,col.jumlahPay));
-        const tglPay=excelDateToStr_(getCell_(r,col.tglPay));
-        const rek=cleanTxt_(getCell_(r,col.rek));
-        const payments=(jumlahPay>0||tglPay) ? [{tgl:tglPay,jumlah:jumlahPay,rek:rek,ket:ketParts.join(' — ')}] : [];
-
-        parsed.push({
-          id: uid(),
-          tglPO: excelDateToStr_(getCell_(r,col.tglPO)),
-          noPO: cleanTxt_(getCell_(r,col.noPO)),
-          noInv: cleanTxt_(getCell_(r,col.noInv)),
-          tglInv: excelDateToStr_(getCell_(r,col.tglInv)),
-          picHandled: cleanTxt_(getCell_(r,col.picHandled)),
-          customer: cleanTxt_(getCell_(r,col.customer)),
-          pic: cleanTxt_(getCell_(r,col.pic)),
-          alamat: cleanTxt_(getCell_(r,col.alamat)),
-          barang: barang,
-          jenis: cleanTxt_(getCell_(r,col.jenis))||'Sparepart',
-          qty: numOf_(getCell_(r,col.qty))||1,
-          seri: cleanTxt_(getCell_(r,col.seri)),
-          harga: numOf_(getCell_(r,col.harga)),
-          dpp: numOf_(getCell_(r,col.dpp)),
-          ppn: numOf_(getCell_(r,col.ppn)),
-          total: numOf_(getCell_(r,col.total)),
-          status: mapStatus_(getCell_(r,col.status)),
-          jadwalPay: excelJadwal,
-          tglKirim: excelDateToStr_(getCell_(r,col.tglKirim)),
-          tglPasang: excelDateToStr_(getCell_(r,col.tglPasang)),
-          ket: '',
-          ar: numOf_(getCell_(r,col.ar)),
-          payments: payments
-        });
-      }
-      importParsedRows=parsed;
+      // cellDates:false -> tanggal dibaca sebagai angka Excel lalu dihitung manual,
+      // supaya tidak bergeser 1 hari karena zona waktu.
+      const wb=XLSX.read(data,{type:'array',cellDates:false});
+      const sheetOf=name=>{
+        const n=wb.SheetNames.find(s=>normalizeHeader_(s)===name);
+        return n ? XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''}) : null;
+      };
+      const trxRows=sheetOf('transaksi');
+      importParsedRows=[]; importErrors=[]; importWarnings=[]; importInfo={};
+      if(trxRows) parseImportNew_(trxRows, sheetOf('barang')||[], sheetOf('pembayaran')||[]);
+      else parseImportLegacy_(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}));
       renderImportPreview();
     }catch(err){
       console.error(err);
@@ -1923,35 +2028,210 @@ function handleImportFile(input){
   reader.readAsArrayBuffer(file);
 }
 
+// Ubah baris-baris sheet menjadi objek {key: nilai} sesuai daftar kolom
+function readImpSheet_(rows, cols, sheetName){
+  if(!rows.length) return [];
+  const hdr=rows[0].map(normalizeImpHeader_);
+  const idx={};
+  cols.forEach(c=>{ idx[c.key]=hdr.indexOf(normalizeImpHeader_(c.h)); });
+  cols.forEach(c=>{ if(c.req && idx[c.key]===-1) importErrors.push(`Sheet ${sheetName}: kolom "${c.h.replace('*','')}" tidak ditemukan.`); });
+  const out=[];
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(!r || r.every(v=>isBlank_(v))) continue;
+    const o={_row:i+1};
+    cols.forEach(c=>{ o[c.key]= idx[c.key]===-1 ? '' : r[idx[c.key]]; });
+    out.push(o);
+  }
+  return out;
+}
+
+function parseImportNew_(trxRows, itemRows, payRowsX){
+  const isContoh=k=>/^contoh/i.test(k);
+  const trx=readImpSheet_(trxRows, IMP_TRX_COLS, 'Transaksi');
+  const items=readImpSheet_(itemRows, IMP_ITEM_COLS, 'Barang');
+  const pays=readImpSheet_(payRowsX, IMP_PAY_COLS, 'Pembayaran');
+  if(importErrors.length) return;
+  let skipped=0;
+  const byKode=new Map();
+  trx.forEach(t=>{
+    const kode=cleanTxt_(t.kode);
+    const where=`Transaksi baris ${t._row}`;
+    if(!kode){ importErrors.push(`${where}: Kode Transaksi kosong.`); return; }
+    if(isContoh(kode)){ skipped++; return; }
+    if(byKode.has(kode.toLowerCase())){ importErrors.push(`${where}: Kode Transaksi "${kode}" dipakai lebih dari sekali.`); return; }
+    const jenisRaw=cleanTxt_(t.jenis).toLowerCase();
+    const jenis = jenisRaw==='mesin'?'Mesin' : jenisRaw==='sparepart'||jenisRaw==='spare part'||jenisRaw==='spare'?'Sparepart' : jenisRaw==='jasa'?'Jasa' : '';
+    if(!jenis) importErrors.push(`${where} (${kode}): Jenis harus Mesin, Sparepart, atau Jasa.`);
+    const customer=cleanTxt_(t.customer);
+    if(!customer) importErrors.push(`${where} (${kode}): Customer kosong.`);
+    const salesNama=cleanTxt_(t.sales);
+    let salesId='';
+    if(salesNama){
+      const s=db.sales.find(x=>String(x.nama||'').trim().toLowerCase()===salesNama.toLowerCase());
+      if(s) salesId=s.id; else importErrors.push(`${where} (${kode}): Sales "${salesNama}" tidak ada di aplikasi.`);
+    }
+    byKode.set(kode.toLowerCase(),{t,kode,jenis,customer,salesNama,salesId,items:[],pays:[]});
+  });
+  items.forEach(it=>{
+    const kode=cleanTxt_(it.kode); const where=`Barang baris ${it._row}`;
+    if(isContoh(kode)) return;
+    const tx=byKode.get(kode.toLowerCase());
+    if(!kode){ importErrors.push(`${where}: Kode Transaksi kosong.`); return; }
+    if(!tx){ importErrors.push(`${where}: Kode Transaksi "${kode}" tidak ada di sheet Transaksi.`); return; }
+    const barang=cleanTxt_(it.barang);
+    if(!barang){ importErrors.push(`${where} (${kode}): Nama Barang kosong.`); return; }
+    const qty=isBlank_(it.qty)?1:numOf_(it.qty);
+    if(qty<=0) importErrors.push(`${where} (${kode}): Qty harus lebih dari 0.`);
+    if(isBlank_(it.harga)) importErrors.push(`${where} (${kode}): Harga/Unit kosong.`);
+    tx.items.push({barang,qty,harga:numOf_(it.harga),seri:cleanTxt_(it.seri)});
+  });
+  pays.forEach(p=>{
+    const kode=cleanTxt_(p.kode); const where=`Pembayaran baris ${p._row}`;
+    if(isContoh(kode)) return;
+    const tx=byKode.get(kode.toLowerCase());
+    if(!kode){ importErrors.push(`${where}: Kode Transaksi kosong.`); return; }
+    if(!tx){ importErrors.push(`${where}: Kode Transaksi "${kode}" tidak ada di sheet Transaksi.`); return; }
+    const isDP=cleanTxt_(p.jenis).toUpperCase()==='DP';
+    if(isDP && tx.pays.length) importErrors.push(`${where} (${kode}): DP hanya boleh di pembayaran pertama transaksi ini.`);
+    if(isBlank_(p.jumlah)) importErrors.push(`${where} (${kode}): Jumlah kosong.`);
+    tx.pays.push({label:isDP?'DP':'',noInv:cleanTxt_(p.noInv),tgl:excelDateToStr_(p.tgl),jumlah:numOf_(p.jumlah),rek:cleanTxt_(p.rek),ket:cleanTxt_(p.ket)});
+  });
+  const existingInv=new Set([...db.mesin,...db.spare].map(r=>String(r.noInv||'').trim().toLowerCase()).filter(Boolean));
+  byKode.forEach(tx=>{
+    if(!tx.items.length){ importErrors.push(`Transaksi "${tx.kode}": belum ada barang di sheet Barang.`); return; }
+    const t=tx.t;
+    const dpp=tx.items.reduce((a,it)=>a+it.qty*it.harga,0);
+    const discount=numOf_(t.discount), ppn=numOf_(t.ppn);
+    const total=dpp-discount+ppn;
+    const payments=labelPayments_(tx.pays);
+    const paid=payments.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
+    const ar=isBlank_(t.ar)?Math.max(0,total-paid):numOf_(t.ar);
+    const status=isBlank_(t.status)?((total>0&&paid>=total)?'LUNAS':'BELUM'):mapStatus_(t.status);
+    const noInv=cleanTxt_(t.noInv);
+    if(noInv && existingInv.has(noInv.toLowerCase())) importWarnings.push(`Transaksi "${tx.kode}": No Invoice "${noInv}" sudah ada di aplikasi (mungkin duplikat).`);
+    if(paid>total && total>0) importWarnings.push(`Transaksi "${tx.kode}": jumlah pembayaran melebihi Total.`);
+    const common={
+      id:uid(), salesId:tx.salesId, tglPO:excelDateToStr_(t.tglPO), noPO:cleanTxt_(t.noPO), noInv, tglInv:excelDateToStr_(t.tglInv),
+      customer:tx.customer, pic:cleanTxt_(t.pic), alamat:cleanTxt_(t.alamat),
+      barang:tx.items.map(it=>it.barang).join(', '), qty:tx.items.reduce((a,it)=>a+it.qty,0),
+      seri:tx.items.map(it=>it.seri).filter(Boolean).join(', '),
+      items:tx.items, dpp, ppn, discount, total, status, ket:cleanTxt_(t.ket),
+      tglKirim:excelDateToStr_(t.tglKirim), ar, payments
+    };
+    const rec = tx.jenis==='Mesin'
+      ? {...common, sales:tx.salesNama, tglLunas:excelDateToStr_(t.tglLunas), tglSetup:excelDateToStr_(t.tglSetup), jenis:'Mesin'}
+      : {...common, picHandled:cleanTxt_(t.picHandled), jenis:tx.jenis, harga:tx.items[0].harga, jadwalPay:excelDateToStr_(t.jadwalPay), tglPasang:excelDateToStr_(t.tglSetup)};
+    importParsedRows.push({type:tx.jenis==='Mesin'?'mesin':'spare', rec, kode:tx.kode, salesNama:tx.salesNama, needDefaultSales:!tx.salesId});
+  });
+  importInfo={skipped, items:importParsedRows.reduce((a,x)=>a+x.rec.items.length,0), pays:importParsedRows.reduce((a,x)=>a+x.rec.payments.length,0)};
+}
+
+// File rekap lama: 1 sheet, 1 baris = 1 transaksi Sparepart
+function parseImportLegacy_(rows){
+  if(!rows.length){ importErrors.push('File Excel kosong.'); return; }
+  const headerMap=buildHeaderMap_(rows[0]);
+  const col={};
+  Object.keys(IMPORT_SPARE_COL_ALIASES).forEach(k=>{ col[k]=findCol_(headerMap, IMPORT_SPARE_COL_ALIASES[k]); });
+  if(col.barang===-1){
+    importErrors.push('Sheet "Transaksi" tidak ditemukan. Pakai file dari tombol "Unduh Format Excel", lalu isi sheet Transaksi, Barang, dan Pembayaran.');
+    return;
+  }
+  for(let i=1;i<rows.length;i++){
+    const r=rows[i];
+    if(!r || r.every(c=>isBlank_(c))) continue;
+    const barang=cleanTxt_(getCell_(r,col.barang));
+    if(!barang) continue; // lewati baris kosong/subtotal
+    const excelKet=cleanTxt_(getCell_(r,col.ket));
+    const excelJadwal=cleanTxt_(getCell_(r,col.jadwalPay));
+    const ketParts=[]; if(excelKet) ketParts.push(excelKet); if(excelJadwal) ketParts.push(excelJadwal);
+    const jumlahPay=numOf_(getCell_(r,col.jumlahPay));
+    const tglPay=excelDateToStr_(getCell_(r,col.tglPay));
+    const rek=cleanTxt_(getCell_(r,col.rek));
+    const payments=(jumlahPay>0||tglPay) ? labelPayments_([{tgl:tglPay,jumlah:jumlahPay,rek:rek,ket:ketParts.join(' — ')}]) : [];
+    const qty=numOf_(getCell_(r,col.qty))||1, harga=numOf_(getCell_(r,col.harga));
+    importParsedRows.push({type:'spare', needDefaultSales:true, kode:'baris '+(i+1), salesNama:'', rec:{
+      id: uid(),
+      tglPO: excelDateToStr_(getCell_(r,col.tglPO)),
+      noPO: cleanTxt_(getCell_(r,col.noPO)),
+      noInv: cleanTxt_(getCell_(r,col.noInv)),
+      tglInv: excelDateToStr_(getCell_(r,col.tglInv)),
+      picHandled: cleanTxt_(getCell_(r,col.picHandled)),
+      customer: cleanTxt_(getCell_(r,col.customer)),
+      pic: cleanTxt_(getCell_(r,col.pic)),
+      alamat: cleanTxt_(getCell_(r,col.alamat)),
+      barang: barang,
+      jenis: cleanTxt_(getCell_(r,col.jenis))||'Sparepart',
+      qty, seri: cleanTxt_(getCell_(r,col.seri)), harga,
+      items:[{barang,qty,harga,seri:cleanTxt_(getCell_(r,col.seri))}],
+      dpp: numOf_(getCell_(r,col.dpp)),
+      ppn: numOf_(getCell_(r,col.ppn)),
+      discount: 0,
+      total: numOf_(getCell_(r,col.total)),
+      status: mapStatus_(getCell_(r,col.status)),
+      jadwalPay: excelJadwal,
+      tglKirim: excelDateToStr_(getCell_(r,col.tglKirim)),
+      tglPasang: excelDateToStr_(getCell_(r,col.tglPasang)),
+      ket: '',
+      ar: numOf_(getCell_(r,col.ar)),
+      payments
+    }});
+  }
+  importInfo={legacy:true};
+}
+
 function renderImportPreview(){
   const el=document.getElementById('imp-preview');
   const btn=document.getElementById('imp-confirm-btn');
-  if(!importParsedRows.length){
-    el.innerHTML='<p style="color:#999;font-size:12px">Tidak ada data valid ditemukan di file ini (cek kolom "NAMA BARANG" terisi).</p>';
-    btn.style.display='none';
-    return;
+  const esc=s=>escAttr_(s);
+  let h='';
+  if(importErrors.length){
+    h+=`<div style="background:#fdecea;border:1px solid #f5c2c0;border-radius:8px;padding:10px 12px;font-size:12px;color:#a33">
+      <b>❌ ${importErrors.length} masalah harus diperbaiki di file Excel dulu:</b>
+      <ul style="margin:6px 0 0 18px">${importErrors.slice(0,30).map(e=>`<li>${esc(e)}</li>`).join('')}</ul>
+      ${importErrors.length>30?`<p style="margin-top:4px">…dan ${importErrors.length-30} lainnya.</p>`:''}</div>`;
+    el.innerHTML=h; btn.style.display='none'; return;
   }
-  let h=`<p style="font-size:12px;margin-bottom:6px">✅ Ditemukan <b>${importParsedRows.length}</b> baris data valid. Contoh:</p>
-  <div style="max-height:220px;overflow:auto;border:1px solid var(--border);border-radius:6px">
-  <table class="pay-list"><thead><tr><th>Customer</th><th>Barang</th><th>Total</th><th>Status</th><th>Bayar</th></tr></thead><tbody>`;
-  importParsedRows.slice(0,5).forEach(r=>{
-    h+=`<tr><td>${r.customer||'-'}</td><td>${r.barang}</td><td>${fmt(r.total)}</td><td>${r.status}</td><td>${r.payments[0]?fmt(r.payments[0].jumlah):'-'}</td></tr>`;
+  if(!importParsedRows.length){
+    el.innerHTML='<p style="color:#999;font-size:12px">Tidak ada transaksi untuk diimport'+(importInfo.skipped?` (${importInfo.skipped} baris CONTOH dilewati)`:'')+'.</p>';
+    btn.style.display='none'; return;
+  }
+  const nM=importParsedRows.filter(x=>x.type==='mesin').length, nS=importParsedRows.length-nM;
+  const nDef=importParsedRows.filter(x=>x.needDefaultSales).length;
+  h+=`<p style="font-size:12px;margin-bottom:6px">✅ Siap diimport: <b>${importParsedRows.length}</b> transaksi (${nM} Mesin, ${nS} Sparepart/Jasa)`+
+     (importInfo.legacy?' — format rekap lama':`, ${importInfo.items} barang, ${importInfo.pays} pembayaran`)+
+     (importInfo.skipped?`. ${importInfo.skipped} baris CONTOH dilewati`:'')+'.</p>';
+  if(nDef) h+=`<p style="font-size:12px;margin-bottom:6px;color:#b26a00">ℹ️ ${nDef} transaksi tanpa kolom Sales akan masuk ke <b>Sales default</b> di atas.</p>`;
+  if(importWarnings.length) h+=`<div style="background:#fff8e6;border:1px solid #f3dca0;border-radius:8px;padding:8px 12px;font-size:12px;color:#8a6100;margin-bottom:8px">
+      <b>⚠️ Perlu dicek (tetap bisa diimport):</b><ul style="margin:4px 0 0 18px">${importWarnings.slice(0,15).map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>`;
+  h+=`<div style="max-height:240px;overflow:auto;border:1px solid var(--border);border-radius:6px">
+  <table class="pay-list"><thead><tr><th>Kode</th><th>Jenis</th><th>Sales</th><th>Customer</th><th>Barang</th><th>Total</th><th>Dibayar</th><th>Status</th></tr></thead><tbody>`;
+  importParsedRows.slice(0,50).forEach(x=>{
+    const r=x.rec, paid=(r.payments||[]).reduce((a,p)=>a+(Number(p.jumlah)||0),0);
+    h+=`<tr><td>${esc(x.kode)}</td><td>${esc(r.jenis)}</td><td>${esc(x.salesNama)||'<i style="color:#999">default</i>'}</td><td>${esc(r.customer)||'-'}</td><td>${esc(r.barang)}</td><td>${fmt(r.total)}</td><td>${fmt(paid)}</td><td>${r.status==='BELUM'?'BELUM LUNAS':r.status}</td></tr>`;
   });
   h+=`</tbody></table></div>`;
+  if(importParsedRows.length>50) h+=`<p style="font-size:11px;color:#999;margin-top:4px">Menampilkan 50 dari ${importParsedRows.length} transaksi.</p>`;
   el.innerHTML=h;
   btn.style.display='inline-flex';
 }
 
 async function confirmImport(){
-  const salesId=document.getElementById('imp-sales').value;
-  if(!salesId){ toast('Pilih sales tujuan dulu','error'); return; }
   if(!importParsedRows.length){ toast('Belum ada data untuk diimport','error'); return; }
-  importParsedRows.forEach(r=>{ r.salesId=salesId; db.spare.push(r); });
+  const defSales=document.getElementById('imp-sales').value;
+  if(importParsedRows.some(x=>x.needDefaultSales) && !defSales){ toast('Pilih Sales default dulu (untuk transaksi yang kolom Sales-nya kosong)','error'); return; }
+  importParsedRows.forEach(x=>{
+    if(x.needDefaultSales){
+      x.rec.salesId=defSales;
+      if(x.type==='mesin'){ const s=db.sales.find(s=>s.id===defSales); x.rec.sales=s?s.nama:''; }
+    }
+    (x.type==='mesin'?db.mesin:db.spare).push(x.rec);
+  });
   const count=importParsedRows.length;
   importParsedRows=[];
   await saveData();
   closeModal('modal-import');
-  toast(`${count} data berhasil diimport`);
+  toast(`${count} transaksi berhasil diimport`);
   renderSidebar(); renderMain();
 }
 
