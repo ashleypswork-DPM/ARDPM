@@ -110,6 +110,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .table-filter:focus{border-color:var(--primary-light);}
 .no-link{background:#e8f4fd;color:var(--primary-light);border:1px solid #cfe3f6;border-radius:12px;min-width:26px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
 .no-link:hover{background:var(--primary-light);color:#fff;}
+tr.row-warn td{background:#fff3bf !important;}
+.warn-ico{margin-left:4px;cursor:help;font-size:12px;}
+.warn-note{margin-top:4px;font-size:10.5px;line-height:1.35;color:#8a5a00;font-weight:600;max-width:240px;}
+.warn-banner{margin:10px 14px;padding:10px 12px;background:#fff8db;border:1px solid #f1d27a;border-radius:8px;font-size:12px;color:#7a5200;}
+.warn-banner ul{margin:6px 0 0 18px;}
+.warn-banner li{margin:2px 0;}
+.warn-banner a{color:#7a5200;font-weight:700;text-decoration:underline;cursor:pointer;}
 .btn{padding:7px 13px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:5px;font-family:var(--font);}
 .btn-primary{background:var(--primary-light);color:#fff;}
 .btn-primary:hover{background:var(--primary);}
@@ -1291,6 +1298,26 @@ function showInvoiceList(id,type){
   openModal('modal-invlist');
 }
 
+// ── CEK TRANSAKSI TIDAK SESUAI (baris dikuningkan) ─────
+// Hilang sendiri begitu datanya dibetulkan, karena dicek ulang setiap tabel tampil.
+function recIssues_(r){
+  const out=[];
+  const pays=r.payments||[];
+  const paid=pays.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
+  const total=Number(r.total)||0;
+  if(pays.length && paid-total>=1) out.push({short:`Lebih bayar ${fmt(paid-total)}`,long:`Lebih bayar ${fmt(paid-total)}: total dibayar ${fmt(paid)}, sedangkan Total (DPP − Discount + PPN) ${fmt(total)}.`});
+  if(pays.length && r.status==='LUNAS' && total-paid>=1) out.push({short:`LUNAS tapi kurang ${fmt(total-paid)}`,long:`Status LUNAS tapi pembayaran masih kurang ${fmt(total-paid)} (dibayar ${fmt(paid)} dari Total ${fmt(total)}).`});
+  return out;
+}
+function issuesBannerHTML_(list, page, type){
+  const bad=[]; list.forEach((r,i)=>{ const iss=recIssues_(r); if(iss.length) bad.push({no:i+1,r,iss}); });
+  if(!bad.length) return '';
+  const edit=type==='mesin'?'editMesin':'editSpare';
+  return `<div class="warn-banner"><b>⚠️ ${bad.length} transaksi perlu dicek</b> (baris berwarna kuning). Klik untuk membuka dan membetulkan:
+    <ul>${bad.slice(0,20).map(x=>`<li><a onclick="${edit}('${x.r.id}')">No. ${x.no} — ${escAttr_(x.r.customer)||'-'}</a>: ${x.iss.map(z=>escAttr_(z.long)).join(' ')}</li>`).join('')}</ul>
+    ${bad.length>20?`<div>…dan ${bad.length-20} lainnya.</div>`:''}</div>`;
+}
+
 function matchesSearch_(record, q){
   if(!q) return true;
   try{ return JSON.stringify(record).toLowerCase().includes(q); }
@@ -1380,14 +1407,15 @@ async function renderMesinTableBody(){
   if(mesinPage<1) mesinPage=1;
   const pageRecords=filtered.slice((mesinPage-1)*PAGE_SIZE, mesinPage*PAGE_SIZE);
 
-  let html=`<div class="table-scroll"><table id="table-mesin">
+  let html=issuesBannerHTML_(filtered,mesinPage,'mesin')+`<div class="table-scroll"><table id="table-mesin">
     <thead><tr><th>No</th><th>Tgl PO</th><th>Customer</th><th>PIC</th><th>Nama Barang</th><th>QTY</th><th>DPP</th><th>PPN</th><th>TOTAL</th><th>History Pay</th><th>Status</th><th>A/R</th><th>Tgl Kirim</th><th>Aksi</th></tr></thead>
     <tbody id="tbody-mesin">`;
   for(const [i,r] of pageRecords.entries()){
     const chips=await renderPayChips(r.payments,r.id,'mesin');
-    html+=`<tr>
-      <td><button class="no-link" onclick="showInvoiceList('${r.id}','mesin')" title="Lihat No Invoice transaksi ini">${(mesinPage-1)*PAGE_SIZE+i+1}</button></td><td>${fmtDate(r.tglPO)}</td>
-      <td><b>${r.customer}</b></td><td>${r.pic}</td>
+    const iss=recIssues_(r);
+    html+=`<tr${iss.length?' class="row-warn"':''}>
+      <td><button class="no-link" onclick="showInvoiceList('${r.id}','mesin')" title="Lihat No Invoice transaksi ini">${(mesinPage-1)*PAGE_SIZE+i+1}</button>${iss.length?`<span class="warn-ico" title="${escAttr_(iss.map(z=>z.long).join(' '))}">⚠️</span>`:''}</td><td>${fmtDate(r.tglPO)}</td>
+      <td><b>${r.customer}</b>${iss.map(x=>`<div class="warn-note" title="${escAttr_(x.long)}">⚠️ ${escAttr_(x.short)}</div>`).join('')}</td><td>${r.pic}</td>
       <td><b>${r.barang}</b><br><span class="text-sm" style="cursor:pointer;color:var(--primary-light)" onclick="showItemDetail('${r.id}','mesin')">🔎 Rincian (${(r.items&&r.items.length)||1} barang)</span></td>
       <td>${r.qty}</td>
       <td class="text-right currency">${fmt(r.dpp)}</td>
@@ -1430,15 +1458,16 @@ async function renderSpareTableBody(){
   if(sparePage<1) sparePage=1;
   const pageRecords=filtered.slice((sparePage-1)*PAGE_SIZE, sparePage*PAGE_SIZE);
 
-  let html=`<div class="table-scroll"><table id="table-spare">
+  let html=issuesBannerHTML_(filtered,sparePage,'spare')+`<div class="table-scroll"><table id="table-spare">
     <thead><tr><th>No</th><th>Tgl PO</th><th>No INV</th><th>Customer</th><th>PIC Handled</th><th>Nama Barang</th><th>Jenis</th><th>QTY</th><th>Jml Barang</th><th>TOTAL</th><th>History Pay</th><th>Status</th><th>A/R</th><th>Jadwal Pay</th><th>Aksi</th></tr></thead>
     <tbody id="tbody-spare">`;
   for(const [i,r] of pageRecords.entries()){
     const chips=await renderPayChips(r.payments,r.id,'spare');
-    html+=`<tr>
-      <td><button class="no-link" onclick="showInvoiceList('${r.id}','spare')" title="Lihat No Invoice transaksi ini">${(sparePage-1)*PAGE_SIZE+i+1}</button></td><td>${fmtDate(r.tglPO)}</td>
+    const iss=recIssues_(r);
+    html+=`<tr${iss.length?' class="row-warn"':''}>
+      <td><button class="no-link" onclick="showInvoiceList('${r.id}','spare')" title="Lihat No Invoice transaksi ini">${(sparePage-1)*PAGE_SIZE+i+1}</button>${iss.length?`<span class="warn-ico" title="${escAttr_(iss.map(z=>z.long).join(' '))}">⚠️</span>`:''}</td><td>${fmtDate(r.tglPO)}</td>
       <td><span class="text-sm">${r.noInv||'-'}</span></td>
-      <td><b>${r.customer}</b></td><td>${r.picHandled}</td>
+      <td><b>${r.customer}</b>${iss.map(x=>`<div class="warn-note" title="${escAttr_(x.long)}">⚠️ ${escAttr_(x.short)}</div>`).join('')}</td><td>${r.picHandled}</td>
       <td><b>${r.barang}</b><br><span class="text-sm" style="cursor:pointer;color:var(--primary-light)" onclick="showItemDetail('${r.id}','spare')">🔎 Rincian (${(r.items&&r.items.length)||1} barang)</span></td>
       <td><span class="status-badge" style="background:#f0f4ff;color:#3b6cd4">${r.jenis}</span></td>
       <td>${r.qty}</td>
