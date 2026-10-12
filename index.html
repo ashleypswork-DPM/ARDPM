@@ -116,6 +116,7 @@ tr.row-warn td{background:#fff3bf !important;}
 .warn-banner{margin:10px 14px;padding:10px 12px;background:#fff8db;border:1px solid #f1d27a;border-radius:8px;font-size:12px;color:#7a5200;}
 .warn-banner ul{margin:6px 0 0 18px;}
 .warn-banner li{margin:2px 0;}
+.field-hint{display:block;margin-top:3px;font-size:10.5px;color:var(--text-light);}
 .warn-banner a{color:#7a5200;font-weight:700;text-decoration:underline;cursor:pointer;}
 .btn{padding:7px 13px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:5px;font-family:var(--font);}
 .btn-primary{background:var(--primary-light);color:#fff;}
@@ -520,6 +521,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="m-tgl-kirim"></div>
         <div class="form-group"><label>Tanggal Setup</label><input type="date" id="m-tgl-setup"></div>
         <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="m-ar" placeholder="0"></div>
+        <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="m-pph" placeholder="0" min="0"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
         <div class="form-group full"><label>Keterangan</label><textarea id="m-ket" placeholder="Catatan tambahan"></textarea></div>
       </div>
       <div class="section-divider">History Pembayaran</div>
@@ -571,6 +573,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="s-tgl-kirim"></div>
         <div class="form-group"><label>Tanggal Pasang</label><input type="date" id="s-tgl-pasang"></div>
         <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="s-ar" placeholder="0"></div>
+        <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="s-pph" placeholder="0" min="0"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
         <div class="form-group full"><label>Keterangan</label><textarea id="s-ket" placeholder="Catatan tambahan"></textarea></div>
       </div>
       <div class="section-divider">History Pembayaran</div>
@@ -1305,8 +1308,11 @@ function recIssues_(r){
   const pays=r.payments||[];
   const paid=pays.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
   const total=Number(r.total)||0;
-  if(pays.length && paid-total>=1) out.push({short:`Lebih bayar ${fmt(paid-total)}`,long:`Lebih bayar ${fmt(paid-total)}: total dibayar ${fmt(paid)}, sedangkan Total (DPP − Discount + PPN) ${fmt(total)}.`});
-  if(pays.length && r.status==='LUNAS' && total-paid>=1) out.push({short:`LUNAS tapi kurang ${fmt(total-paid)}`,long:`Status LUNAS tapi pembayaran masih kurang ${fmt(total-paid)} (dibayar ${fmt(paid)} dari Total ${fmt(total)}).`});
+  const pph=Number(r.pph)||0;               // PPh Jasa yang dipotong customer = ikut melunasi
+  const settled=paid+pph;
+  const desc=`dibayar ${fmt(paid)}${pph?` + PPh ${fmt(pph)}`:''}`;
+  if(pays.length && settled-total>=1) out.push({short:`Lebih bayar ${fmt(settled-total)}`,long:`Lebih bayar ${fmt(settled-total)}: ${desc}, sedangkan Total (DPP − Discount + PPN) ${fmt(total)}.`});
+  if(pays.length && r.status==='LUNAS' && total-settled>=1) out.push({short:`LUNAS tapi kurang ${fmt(total-settled)}`,long:`Status LUNAS tapi masih kurang ${fmt(total-settled)} (${desc} dari Total ${fmt(total)}). Kalau selisihnya PPh, isi kolom PPh Jasa.`});
   return out;
 }
 function issuesBannerHTML_(list, page, type){
@@ -1696,8 +1702,9 @@ function openAddMesin(){
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-mesin-title').textContent='Tambah Penjualan Mesin';
   ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
-  ['m-dpp','m-ppn','m-discount','m-total','m-ar'].forEach(id=>document.getElementById(id).value='');
+  ['m-dpp','m-ppn','m-discount','m-total','m-ar','m-pph'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-status').value='BELUM';
+  document.getElementById('m-pph').value=0;
   const s=db.sales.find(x=>x.id===currentSalesId);
   if(s) document.getElementById('m-sales').value=s.nama;
   addItemRow('mesin'); // mulai dengan 1 baris kosong biar langsung siap diisi
@@ -1736,6 +1743,7 @@ async function editMesin(id){
   document.getElementById('m-ket').value=r.ket||'';
   document.getElementById('m-tgl-kirim').value=r.tglKirim||'';
   document.getElementById('m-tgl-setup').value=r.tglSetup||'';
+  document.getElementById('m-pph').value=r.pph||0;
   document.getElementById('m-ar').value=r.ar||'';
   renderItemRows('mesin'); renderPayRows('mesin'); openModal('modal-mesin');
 }
@@ -1749,7 +1757,7 @@ async function saveMesin(){
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
-  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   const finalId=editingId||uid();
@@ -1789,8 +1797,9 @@ function openAddSpare(){
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-spare-title').textContent='Tambah Penjualan Spareparts';
   ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-pic-handled','s-customer','s-pic','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
-  ['s-dpp','s-ppn','s-discount','s-total','s-ar'].forEach(id=>document.getElementById(id).value='');
+  ['s-dpp','s-ppn','s-discount','s-total','s-ar','s-pph'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s-status').value='BELUM';
+  document.getElementById('s-pph').value=0;
   document.getElementById('s-jenis').value='Sparepart';
   const s=db.sales.find(x=>x.id===currentSalesId);
   if(s) document.getElementById('s-pic-handled').value=s.nama;
@@ -1825,6 +1834,7 @@ async function editSpare(id){
   document.getElementById('s-jadwal-pay').value=r.jadwalPay||'';
   document.getElementById('s-tgl-kirim').value=r.tglKirim||'';
   document.getElementById('s-tgl-pasang').value=r.tglPasang||'';
+  document.getElementById('s-pph').value=r.pph||0;
   document.getElementById('s-ket').value=r.ket||'';
   document.getElementById('s-ar').value=r.ar||'';
   renderItemRows('spare'); renderPayRows('spare');openModal('modal-spare');
@@ -1839,7 +1849,7 @@ async function saveSpare(){
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
   const aggHarga=cleanItems.length?cleanItems[0].harga:0;
-  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   const finalId=editingId||uid();
@@ -1887,6 +1897,7 @@ const IMP_TRX_COLS = [
   {key:'picHandled',h:'PIC Handled',     w:14},
   {key:'ppn',       h:'PPN',             w:15, num:true},
   {key:'discount',  h:'Discount',        w:14, num:true},
+  {key:'pph',       h:'PPh Jasa',        w:14, num:true},
   {key:'status',    h:'Status',          w:13},
   {key:'tglLunas',  h:'Tgl Lunas',       w:12, date:true},
   {key:'jadwalPay', h:'Jadwal Pay',      w:12, date:true},
@@ -2043,9 +2054,9 @@ function downloadImportTemplate(){
   const mesinCols=[['No.','t',6],['Tanggal PO','d',11],['Sales','t',10],['Customer','t',22],['PIC','t',14],['NAMA BARANG','t',30],['QTY','n',6],['No. Seri','t',12],['DPP','n',15],['PPN','n',14],['TOTAL','n',15]];
   for(let i=1;i<=AR_MESIN_PAY_COUNT;i++) mesinCols.push(['Payment '+roman(i),'n',15]);
   mesinCols.push(['STATUS','t',10],['Tanggal Lunas','d',11],['Ket','t',16],['Tanggal kirim','d',11],['Tanggal Set Up','d',11],['Jenis','t',8],['A/R','n',14],
-    ['No PO','t',12,1],['No Invoice','t',16,1],['Tanggal Inv','d',11,1],['Alamat','t',26,1],['Discount','n',14,1]);
+    ['No PO','t',12,1],['No Invoice','t',16,1],['Tanggal Inv','d',11,1],['Alamat','t',26,1],['Discount','n',14,1],['PPh Jasa','n',14,1]);
   const spareCols=[['No.','t',6],['Tanggal PO','d',11],['NO PO','t',12],['NO INV','t',16],['TANGGAL INV','d',11],['FP','t',7],['PIC Handled','t',11],['CUST','t',20],['PIC','t',13],['NAMA BARANG','t',28],['JENIS','t',10],['QTY','n',6],['No. Seri','t',10],['HARGA PER PC','n',13],['DPP','n',13],['PPN','n',12],['TOTAL','n',14],['Detail Payment','n',14],['Tanggal Pay','d',11],['REK','t',9],['Ket Tf','t',12],['STATUS','t',9],['Jadwal pay','d',11],['Tanggal kirim','d',11],['Tanggal Pasang','d',11],['A/R','n',13],
-    ['Sales','t',10,1],['Alamat','t',26,1],['Discount','n',13,1]];
+    ['Sales','t',10,1],['Alamat','t',26,1],['Discount','n',13,1],['PPh Jasa','n',13,1]];
   const build=(title,cols,rows)=>{
     const ws={}; const put=(r,c,cell)=>{ ws[XLSX.utils.encode_cell({r,c})]=cell; };
     put(0,0,{t:'s',v:title,s:sTitle});
@@ -2098,7 +2109,8 @@ function downloadImportTemplate(){
     ['• Sheet ini tidak punya kolom Sales, jadi transaksinya masuk ke "Sales Default" yang dipilih saat import (atau isi kolom tambahan Sales).'],
     [''],
     ['UMUM'],
-    ['• Status kosong: otomatis LUNAS kalau total pembayaran ≥ TOTAL. A/R kosong: otomatis TOTAL − total pembayaran.'],
+    ['• PPh Jasa (kolom abu-abu): isi kalau customer memotong PPh, kalau tidak ada isi 0 atau kosongkan. PPh dihitung sebagai bagian pelunasan.'],
+    ['• Status kosong: otomatis LUNAS kalau total pembayaran + PPh ≥ TOTAL. A/R kosong: otomatis TOTAL − total pembayaran − PPh.'],
     ['• No Invoice per pembayaran tidak ada di rekap AR, jadi bisa dilengkapi nanti lewat Edit di aplikasi.'],
     ['• Foto No. Seri tidak bisa diimport; untuk Mesin, foto diminta saat transaksi diedit lalu disimpan.']
   ];
@@ -2121,7 +2133,7 @@ const AR_ALIASES={
   dpp:['dpp'], ppn:['ppn'], total:['total'], status:['status'], tglLunas:['tanggal lunas','tgl lunas'], ket:['ket','keterangan'],
   tglKirim:['tanggal kirim','tgl kirim'], tglSetup:['tanggal set up','tanggal setup','tgl setup','tgl set up'], tglPasang:['tanggal pasang','tgl pasang'],
   ar:['a/r','ar'], noPO:['no po'], noInv:['no inv','no invoice'], tglInv:['tanggal inv','tgl inv','tanggal invoice'], fp:['fp'],
-  picHandled:['pic handled'], alamat:['alamat','alamat customer'], discount:['discount','diskon'],
+  picHandled:['pic handled'], alamat:['alamat','alamat customer'], discount:['discount','diskon'], pph:['pph jasa','pph','pph 23','pph23'],
   payJumlah:['detail payment','jumlah (rp)','jumlah','payment'], payTgl:['tanggal pay','tgl pay'], payRek:['rek','rekening'], payKet:['ket tf'],
   jadwalPay:['jadwal pay']
 };
@@ -2224,8 +2236,9 @@ function buildArTransaction_(b,col,payCols,isMesin,sheetName){
   const total=dpp-discount+ppn;
   if(hasTotal && Math.abs(total-sumTotal)>=1) importWarnings.push(`${where}: TOTAL di Excel (${fmt(sumTotal)}) beda dengan DPP − Discount + PPN (${fmt(total)}). Dipakai ${fmt(total)}.`);
   const paid=payments.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
-  const ar=isBlank_(g(R0,'ar'))?Math.max(0,total-paid):numOf_(g(R0,'ar'));
-  const status=isBlank_(g(R0,'status'))?((total>0&&paid>=total)?'LUNAS':'BELUM'):mapStatus_(g(R0,'status'));
+  const pph=numOf_(g(R0,'pph'));
+  const ar=isBlank_(g(R0,'ar'))?Math.max(0,total-paid-pph):numOf_(g(R0,'ar'));
+  const status=isBlank_(g(R0,'status'))?((total>0&&paid+pph>=total)?'LUNAS':'BELUM'):mapStatus_(g(R0,'status'));
   // Sales
   const salesNama=cleanTxt_(g(R0,'sales'));
   let sales=null;
@@ -2233,7 +2246,7 @@ function buildArTransaction_(b,col,payCols,isMesin,sheetName){
   const noInv=cleanTxt_(g(R0,'noInv'));
   const existingInv=new Set([...db.mesin,...db.spare].map(r=>String(r.noInv||'').trim().toLowerCase()).filter(Boolean));
   if(noInv && existingInv.has(noInv.toLowerCase())) importWarnings.push(`${where}: No Invoice "${noInv}" sudah ada di aplikasi (mungkin duplikat).`);
-  if(paid>total && total>0) importWarnings.push(`${where}: jumlah pembayaran melebihi Total.`);
+  if(paid+pph>total && total>0) importWarnings.push(`${where}: jumlah pembayaran${pph?' + PPh':''} melebihi Total.`);
   const fp=cleanTxt_(g(R0,'fp'));
   const ket=[cleanTxt_(g(R0,'ket')), fp?'FP: '+fp:''].filter(Boolean).join(' — ');
   const cleanItems=items.map(it=>({barang:it.barang,qty:it.qty,harga:it.harga,seri:it.seri}));
@@ -2242,7 +2255,7 @@ function buildArTransaction_(b,col,payCols,isMesin,sheetName){
     customer, pic:cleanTxt_(g(R0,'pic')), alamat:cleanTxt_(g(R0,'alamat')),
     barang:cleanItems.map(it=>it.barang).join(', '), qty:cleanItems.reduce((a,it)=>a+it.qty,0),
     seri:cleanItems.map(it=>it.seri).filter(Boolean).join(', '),
-    items:cleanItems, dpp, ppn, discount, total, status, ket, tglKirim:excelDateToStr_(g(R0,'tglKirim')), ar, payments
+    items:cleanItems, dpp, ppn, discount, pph, total, status, ket, tglKirim:excelDateToStr_(g(R0,'tglKirim')), ar, payments
   };
   let rec, type;
   if(isMesin){
@@ -2364,17 +2377,18 @@ function parseImportNew_(trxRows, itemRows, payRowsX){
     const total=dpp-discount+ppn;
     const payments=labelPayments_(tx.pays);
     const paid=payments.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
-    const ar=isBlank_(t.ar)?Math.max(0,total-paid):numOf_(t.ar);
-    const status=isBlank_(t.status)?((total>0&&paid>=total)?'LUNAS':'BELUM'):mapStatus_(t.status);
+    const pph=numOf_(t.pph);
+    const ar=isBlank_(t.ar)?Math.max(0,total-paid-pph):numOf_(t.ar);
+    const status=isBlank_(t.status)?((total>0&&paid+pph>=total)?'LUNAS':'BELUM'):mapStatus_(t.status);
     const noInv=cleanTxt_(t.noInv);
     if(noInv && existingInv.has(noInv.toLowerCase())) importWarnings.push(`Transaksi "${tx.kode}": No Invoice "${noInv}" sudah ada di aplikasi (mungkin duplikat).`);
-    if(paid>total && total>0) importWarnings.push(`Transaksi "${tx.kode}": jumlah pembayaran melebihi Total.`);
+    if(paid+pph>total && total>0) importWarnings.push(`Transaksi "${tx.kode}": jumlah pembayaran${pph?' + PPh':''} melebihi Total.`);
     const common={
       id:uid(), salesId:tx.salesId, tglPO:excelDateToStr_(t.tglPO), noPO:cleanTxt_(t.noPO), noInv, tglInv:excelDateToStr_(t.tglInv),
       customer:tx.customer, pic:cleanTxt_(t.pic), alamat:cleanTxt_(t.alamat),
       barang:tx.items.map(it=>it.barang).join(', '), qty:tx.items.reduce((a,it)=>a+it.qty,0),
       seri:tx.items.map(it=>it.seri).filter(Boolean).join(', '),
-      items:tx.items, dpp, ppn, discount, total, status, ket:cleanTxt_(t.ket),
+      items:tx.items, dpp, ppn, discount, pph, total, status, ket:cleanTxt_(t.ket),
       tglKirim:excelDateToStr_(t.tglKirim), ar, payments
     };
     const rec = tx.jenis==='Mesin'
