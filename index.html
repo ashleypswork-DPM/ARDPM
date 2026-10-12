@@ -105,6 +105,11 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .table-toolbar{padding:10px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border);}
 .table-toolbar input{flex:1;padding:7px 11px;border:1px solid var(--border);border-radius:6px;font-size:12px;outline:none;font-family:var(--font);}
 .table-toolbar input:focus{border-color:var(--primary-light);}
+.filterbox{display:inline-flex;align-items:center;gap:6px;}
+.table-filter{padding:7px 9px;border:1px solid var(--border);border-radius:6px;font-size:12px;font-family:var(--font);max-width:260px;background:#fff;color:var(--text);outline:none;cursor:pointer;}
+.table-filter:focus{border-color:var(--primary-light);}
+.no-link{background:#e8f4fd;color:var(--primary-light);border:1px solid #cfe3f6;border-radius:12px;min-width:26px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;}
+.no-link:hover{background:var(--primary-light);color:#fff;}
 .btn{padding:7px 13px;border-radius:6px;border:none;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:5px;font-family:var(--font);}
 .btn-primary{background:var(--primary-light);color:#fff;}
 .btn-primary:hover{background:var(--primary);}
@@ -463,6 +468,13 @@ tbody td{padding:8px 11px;vertical-align:top;}
 </div>
 
 <!-- MODAL: PAY DETAIL -->
+<div class="modal-overlay" id="modal-invlist">
+  <div class="modal modal-md">
+    <div class="modal-header"><h3>🧾 Daftar No Invoice</h3><button class="modal-close" onclick="closeModal('modal-invlist')">×</button></div>
+    <div class="modal-body" id="invlist-body"></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-invlist')">Tutup</button></div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-paydetail">
   <div class="modal modal-md">
     <div class="modal-header"><h3>💳 Detail History Pembayaran</h3><button class="modal-close" onclick="closeModal('modal-paydetail')">×</button></div>
@@ -722,6 +734,7 @@ const DEFAULT_DB = {
 let db = JSON.parse(JSON.stringify(DEFAULT_DB));
 let currentSalesId=null, currentTab='mesin', editingId=null, payRows=[], itemRows=[], currentItemPrefix='mesin';
 let mesinPage=1, sparePage=1, mesinSearchQ='', spareSearchQ='';
+let mesinFilterSel='', spareFilterSel=''; // pilihan dropdown filter: 'c:<customer>' atau 'i:<no invoice>'
 const PAGE_SIZE=10;
 let currentPayPrefix='mesin'; // track which modal is open for pay rows
 
@@ -1127,7 +1140,7 @@ function buildPie(segments){
 // ═══════════════════════════════════════════════════════
 // SELECT SALES / RENDER MAIN
 // ═══════════════════════════════════════════════════════
-function selectSales(id){ currentSalesId=id; mesinPage=1; sparePage=1; mesinSearchQ=''; spareSearchQ=''; renderSidebar(); renderMain(); closeSidebarMobile(); }
+function selectSales(id){ currentSalesId=id; mesinPage=1; sparePage=1; mesinSearchQ=''; spareSearchQ=''; mesinFilterSel=''; spareFilterSel=''; renderSidebar(); renderMain(); closeSidebarMobile(); }
 function renderMain(){
   const sales=db.sales.find(s=>s.id===currentSalesId);
   if(!sales) return;
@@ -1220,6 +1233,64 @@ async function renderPayChips(payments, id, type){
 // ═══════════════════════════════════════════════════════
 // PAGINASI + DRAG-SCROLL (mouse, untuk mode PC/browser)
 // ═══════════════════════════════════════════════════════
+// ── FILTER DROPDOWN (Customer / No Invoice) ─────────────
+function natCmp_(a,b){ return String(a).localeCompare(String(b),'id',{numeric:true,sensitivity:'base'}); }
+// Semua No Invoice di 1 transaksi: induk + yang ada di History Pembayaran
+function invoiceListOf_(r){
+  const out=[];
+  if(String(r.noInv||'').trim()) out.push({no:String(r.noInv).trim(),jenis:'Induk',tgl:r.tglInv||'',jumlah:r.total,payIdx:null});
+  const pays=r.payments||[]; const dp=payHasDP_(pays);
+  pays.forEach((p,i)=>{ if(String(p.noInv||'').trim()) out.push({no:String(p.noInv).trim(),jenis:payLabel_(i,dp),tgl:p.tgl||'',jumlah:p.jumlah,payIdx:i}); });
+  return out;
+}
+function matchesSelFilter_(r, sel){
+  if(!sel) return true;
+  const v=sel.slice(2).toLowerCase();
+  if(sel.startsWith('c:')) return String(r.customer||'').trim().toLowerCase()===v;
+  if(sel.startsWith('i:')) return invoiceListOf_(r).some(x=>x.no.toLowerCase()===v);
+  return true;
+}
+function filterSelectHTML_(type, records, sel){
+  const custs=[...new Set(records.map(r=>String(r.customer||'').trim()).filter(Boolean))].sort(natCmp_);
+  const inv=new Map(); // no -> keterangan (diambil yang pertama)
+  records.forEach(r=>invoiceListOf_(r).forEach(x=>{ if(!inv.has(x.no)) inv.set(x.no,`${x.jenis} · ${r.customer||'-'}`); }));
+  const invNos=[...inv.keys()].sort(natCmp_);
+  const o=(val,label)=>`<option value="${escAttr_(val)}"${val===sel?' selected':''}>${escAttr_(label)}</option>`;
+  let h=`<select id="filter-${type}" class="table-filter" onchange="setTableFilter('${type}',this.value)" title="Filter berdasarkan Customer atau No Invoice">`+o('','— Semua Customer / Invoice —');
+  if(custs.length) h+=`<optgroup label="Customer (${custs.length})">`+custs.map(c=>o('c:'+c,c)).join('')+`</optgroup>`;
+  if(invNos.length) h+=`<optgroup label="No Invoice (${invNos.length})">`+invNos.map(n=>o('i:'+n,`${n}  —  ${inv.get(n)}`)).join('')+`</optgroup>`;
+  return h+`</select>`+(sel?`<button class="btn btn-outline" style="font-size:11px" onclick="setTableFilter('${type}','')" title="Hapus filter">✕</button>`:'');
+}
+function setTableFilter(type, val){
+  if(type==='mesin'){ mesinFilterSel=val; mesinPage=1; refreshFilterBox_('mesin'); renderMesinTableBody(); }
+  else { spareFilterSel=val; sparePage=1; refreshFilterBox_('spare'); renderSpareTableBody(); }
+}
+function refreshFilterBox_(type){
+  const box=document.getElementById('filterbox-'+type); if(!box) return;
+  const recs=(type==='mesin'?db.mesin:db.spare).filter(m=>m.salesId===currentSalesId);
+  box.innerHTML=filterSelectHTML_(type,recs,type==='mesin'?mesinFilterSel:spareFilterSel);
+}
+// Popup daftar No Invoice di 1 transaksi (klik nomor urut di tabel)
+function showInvoiceList(id,type){
+  const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
+  if(!r) return;
+  const list=invoiceListOf_(r);
+  const pays=r.payments||[], dp=payHasDP_(pays);
+  // tampilkan juga pembayaran yang belum punya No Invoice, supaya kelihatan mana yang belum diisi
+  const rows=[];
+  rows.push({no:r.noInv||'',jenis:'Induk',tgl:r.tglInv||'',jumlah:r.total,payIdx:null});
+  pays.forEach((p,i)=>rows.push({no:p.noInv||'',jenis:payLabel_(i,dp),tgl:p.tgl||'',jumlah:p.jumlah,payIdx:i}));
+  let h=`<p class="text-sm" style="margin-bottom:10px"><b>${escAttr_(r.customer)||'-'}</b> — ${escAttr_(r.barang)||'-'}<br>${list.length} nomor invoice tercatat.</p>
+    <table class="pay-list"><thead><tr><th>Jenis</th><th>No Invoice</th><th>Tanggal</th><th style="text-align:right">Jumlah</th><th></th></tr></thead><tbody>`;
+  rows.forEach(x=>{
+    h+=`<tr><td class="pay-label">${x.jenis}</td><td>${x.no?escAttr_(x.no):'<span style="color:#bbb">belum diisi</span>'}</td><td>${fmtDate(x.tgl)}</td><td class="currency" style="text-align:right">${fmt(Number(x.jumlah)||0)}</td>
+      <td><button class="btn btn-outline" style="font-size:10px;padding:3px 7px" title="Cetak invoice ini" onclick="closeModal('modal-invlist');buildInvoiceDoc_('${r.id}','${type}',${x.payIdx===null?'null':x.payIdx})">🖨️</button></td></tr>`;
+  });
+  h+=`</tbody></table>`;
+  document.getElementById('invlist-body').innerHTML=h;
+  openModal('modal-invlist');
+}
+
 function matchesSearch_(record, q){
   if(!q) return true;
   try{ return JSON.stringify(record).toLowerCase().includes(q); }
@@ -1291,7 +1362,8 @@ async function renderMesinTab(tc){
   const records=db.mesin.filter(m=>m.salesId===currentSalesId);
   let html=renderSummary(records);
   html+=`<div class="table-wrap"><div class="table-toolbar">
-    <input type="text" placeholder="🔍 Cari customer, barang..." id="search-mesin" oninput="filterMesin()">
+    <input type="text" placeholder="🔍 Cari customer, barang, no invoice..." id="search-mesin" oninput="filterMesin()">
+    <span id="filterbox-mesin" class="filterbox">${filterSelectHTML_('mesin',records,mesinFilterSel)}</span>
     <button class="btn btn-primary" onclick="openAddMesin()">➕ Tambah Mesin</button>
   </div><div id="mesin-table-container"></div></div>`;
   tc.innerHTML=html;
@@ -1302,7 +1374,7 @@ async function renderMesinTableBody(){
   const cont=document.getElementById('mesin-table-container');
   if(!cont) return;
   const all=db.mesin.filter(m=>m.salesId===currentSalesId);
-  const filtered=all.filter(r=>matchesSearch_(r,mesinSearchQ));
+  const filtered=all.filter(r=>matchesSelFilter_(r,mesinFilterSel)&&matchesSearch_(r,mesinSearchQ));
   const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
   if(mesinPage>totalPages) mesinPage=totalPages;
   if(mesinPage<1) mesinPage=1;
@@ -1314,7 +1386,7 @@ async function renderMesinTableBody(){
   for(const [i,r] of pageRecords.entries()){
     const chips=await renderPayChips(r.payments,r.id,'mesin');
     html+=`<tr>
-      <td>${(mesinPage-1)*PAGE_SIZE+i+1}</td><td>${fmtDate(r.tglPO)}</td>
+      <td><button class="no-link" onclick="showInvoiceList('${r.id}','mesin')" title="Lihat No Invoice transaksi ini">${(mesinPage-1)*PAGE_SIZE+i+1}</button></td><td>${fmtDate(r.tglPO)}</td>
       <td><b>${r.customer}</b></td><td>${r.pic}</td>
       <td><b>${r.barang}</b><br><span class="text-sm" style="cursor:pointer;color:var(--primary-light)" onclick="showItemDetail('${r.id}','mesin')">🔎 Rincian (${(r.items&&r.items.length)||1} barang)</span></td>
       <td>${r.qty}</td>
@@ -1328,7 +1400,7 @@ async function renderMesinTableBody(){
       <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','mesin')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editMesin('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteMesin('${r.id}')">🗑️</button></td>
     </tr>`;
   }
-  if(!pageRecords.length) html+=`<tr><td colspan="14" class="no-data">${filtered.length===0 && all.length>0 ? 'Tidak ada data yang cocok dengan pencarian' : 'Belum ada data penjualan mesin'}</td></tr>`;
+  if(!pageRecords.length) html+=`<tr><td colspan="14" class="no-data">${filtered.length===0 && all.length>0 ? 'Tidak ada data yang cocok dengan pencarian/filter' : 'Belum ada data penjualan mesin'}</td></tr>`;
   html+=`</tbody></table></div>`;
   html+=paginationHTML_(mesinPage,totalPages,'goToMesinPage');
   cont.innerHTML=html;
@@ -1340,7 +1412,8 @@ async function renderSpareTab(tc){
   const records=db.spare.filter(m=>m.salesId===currentSalesId);
   let html=renderSummary(records);
   html+=`<div class="table-wrap"><div class="table-toolbar">
-    <input type="text" placeholder="🔍 Cari customer, barang..." id="search-spare" oninput="filterSpare()">
+    <input type="text" placeholder="🔍 Cari customer, barang, no invoice..." id="search-spare" oninput="filterSpare()">
+    <span id="filterbox-spare" class="filterbox">${filterSelectHTML_('spare',records,spareFilterSel)}</span>
     <button class="btn btn-primary" onclick="openAddSpare()">➕ Tambah Sparepart</button>
   </div><div id="spare-table-container"></div></div>`;
   tc.innerHTML=html;
@@ -1351,7 +1424,7 @@ async function renderSpareTableBody(){
   const cont=document.getElementById('spare-table-container');
   if(!cont) return;
   const all=db.spare.filter(m=>m.salesId===currentSalesId);
-  const filtered=all.filter(r=>matchesSearch_(r,spareSearchQ));
+  const filtered=all.filter(r=>matchesSelFilter_(r,spareFilterSel)&&matchesSearch_(r,spareSearchQ));
   const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
   if(sparePage>totalPages) sparePage=totalPages;
   if(sparePage<1) sparePage=1;
@@ -1363,7 +1436,7 @@ async function renderSpareTableBody(){
   for(const [i,r] of pageRecords.entries()){
     const chips=await renderPayChips(r.payments,r.id,'spare');
     html+=`<tr>
-      <td>${(sparePage-1)*PAGE_SIZE+i+1}</td><td>${fmtDate(r.tglPO)}</td>
+      <td><button class="no-link" onclick="showInvoiceList('${r.id}','spare')" title="Lihat No Invoice transaksi ini">${(sparePage-1)*PAGE_SIZE+i+1}</button></td><td>${fmtDate(r.tglPO)}</td>
       <td><span class="text-sm">${r.noInv||'-'}</span></td>
       <td><b>${r.customer}</b></td><td>${r.picHandled}</td>
       <td><b>${r.barang}</b><br><span class="text-sm" style="cursor:pointer;color:var(--primary-light)" onclick="showItemDetail('${r.id}','spare')">🔎 Rincian (${(r.items&&r.items.length)||1} barang)</span></td>
@@ -1378,7 +1451,7 @@ async function renderSpareTableBody(){
       <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','spare')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editSpare('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteSpare('${r.id}')">🗑️</button></td>
     </tr>`;
   }
-  if(!pageRecords.length) html+=`<tr><td colspan="15" class="no-data">${filtered.length===0 && all.length>0 ? 'Tidak ada data yang cocok dengan pencarian' : 'Belum ada data spareparts'}</td></tr>`;
+  if(!pageRecords.length) html+=`<tr><td colspan="15" class="no-data">${filtered.length===0 && all.length>0 ? 'Tidak ada data yang cocok dengan pencarian/filter' : 'Belum ada data spareparts'}</td></tr>`;
   html+=`</tbody></table></div>`;
   html+=paginationHTML_(sparePage,totalPages,'goToSparePage');
   cont.innerHTML=html;
