@@ -131,6 +131,8 @@ tr.row-warn td{background:#fff3bf !important;}
 .reminder-list small{display:block;color:var(--text-light);font-size:10.5px;margin-top:2px;}
 .late-badge{display:inline-block;background:#fff1e6;color:#d35400;border:1px solid #f6c9a8;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:700;white-space:nowrap;}
 .reminder-note{font-size:10.5px;color:var(--text-light);margin:10px 0 4px;}
+.late-badge.late-soft{background:#f1f4f8;color:#5b6b80;border-color:#d9e0ea;}
+.reminder-list small.never-paid{color:#c62828;font-weight:700;}
 .reminder-foot{padding:10px 20px 14px;display:flex;justify-content:flex-end;border-top:1px solid var(--border);}
 @media (max-width:860px){ .reminder-box{width:94vw;} }
 @media (max-width:860px){ .form-spacer{display:none;} }
@@ -500,7 +502,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
     <div class="reminder-body">
       <p id="reminder-sum" class="reminder-sum"></p>
       <div class="reminder-list" id="reminder-list"></div>
-      <p class="reminder-note">Jatuh tempo = 1 bulan setelah pembayaran terakhir (atau setelah Tanggal Invoice / Tanggal PO kalau belum ada pembayaran). Klik nama customer untuk membuka transaksinya.</p>
+      <p class="reminder-note">Jatuh tempo = 1 bulan setelah pembayaran terakhir (atau setelah Tanggal Invoice / Tanggal PO kalau belum ada pembayaran). Transaksi yang belum pernah dibayar selalu ditampilkan. Klik nama customer untuk membuka transaksinya.</p>
     </div>
     <div class="reminder-foot"><button class="btn btn-primary" onclick="closeModal('modal-reminder')">Tutup</button></div>
   </div>
@@ -1378,11 +1380,14 @@ function overdueList_(){
     const sisa=(Number(r.total)||0)-paid-(Number(r.pph)||0)-(Number(r.admin)||0);
     if(sisa<1) return;
     const payDates=pays.map(p=>isoToDate_(p.tgl)).filter(Boolean).sort((a,b)=>a-b);
-    const base=payDates.length?payDates[payDates.length-1]:(isoToDate_(r.tglInv)||isoToDate_(r.tglPO));
-    if(!base) return;
+    const hasPay=payDates.length>0;
+    const base=hasPay?payDates[payDates.length-1]:(isoToDate_(r.tglInv)||isoToDate_(r.tglPO));
+    // Yang belum pernah bayar sama sekali SELALU masuk daftar (walau belum jatuh tempo / tanpa tanggal)
+    if(!base){ if(!hasPay) out.push({r,type,sisa,base:null,due:null,late:-1,hasPay}); return; }
     const due=addOneMonth_(base);
-    if(today<=due) return;
-    out.push({r,type,sisa,base,due,late:Math.round((today-due)/86400000),hasPay:payDates.length>0});
+    const late=Math.round((today-due)/86400000);
+    if(late<=0 && hasPay) return;
+    out.push({r,type,sisa,base,due,late,hasPay});
   }));
   return out;
 }
@@ -1390,12 +1395,13 @@ function showPaymentReminder(){
   const list=overdueList_();
   if(!list.length) return;
   // 1 baris = 1 transaksi, urut dari yang paling lama terlambat
-  const rows=list.sort((a,b)=>b.late-a.late);
+  const rows=list.sort((a,b)=>b.late-a.late);   // paling lama terlambat di atas; belum jatuh tempo / tanpa tanggal di bawah
+  const nNever=rows.filter(x=>!x.hasPay).length;
   const total=rows.reduce((a,x)=>a+x.sisa,0);
   const nCust=new Set(rows.map(x=>String(x.r.customer||'').trim().toLowerCase())).size;
   const salesName=id=>{ const s=db.sales.find(x=>x.id===id); return s?s.nama:'-'; };
   const fmtD=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-  document.getElementById('reminder-sum').innerHTML=`<b>${rows.length} transaksi</b> dari <b>${nCust} customer</b> sudah lewat jatuh tempo, total belum lunas <b>${fmt(Math.round(total))}</b>.`;
+  document.getElementById('reminder-sum').innerHTML=`<b>${rows.length} transaksi</b> dari <b>${nCust} customer</b> belum lunas dan perlu ditagih${nNever?` (${nNever} di antaranya <b>belum pernah bayar</b>)`:''}, total belum lunas <b>${fmt(Math.round(total))}</b>.`;
   let h=`<table><thead><tr><th>Customer</th><th>No Invoice Induk</th><th>Nama PIC</th><th>Nama Barang</th><th style="text-align:right">Belum Lunas</th><th>Terlambat</th></tr></thead><tbody>`;
   rows.forEach((x,i)=>{
     const r=x.r, items=r.items||[];
@@ -1406,7 +1412,9 @@ function showPaymentReminder(){
       <td>${escAttr_(String(r.pic||'').trim())||'-'}</td>
       <td>${escAttr_(barang)}${items.length>1?`<small>+${items.length-1} barang lain</small>`:''}</td>
       <td class="amt">${fmt(Math.round(x.sisa))}</td>
-      <td><span class="late-badge">${x.late} hari</span><small>${x.hasPay?'Bayar terakhir':'Belum ada bayar · invoice/PO'} ${fmtD(x.base)}</small></td></tr>`;
+      <td>${x.late>0?`<span class="late-badge">${x.late} hari</span>`:`<span class="late-badge late-soft">${x.base?'Belum jatuh tempo':'Tanpa tanggal'}</span>`}
+        ${!x.hasPay?`<small class="never-paid">Belum pernah bayar</small>`:''}
+        <small>${x.base?(x.hasPay?'Bayar terakhir ':'Invoice/PO ')+fmtD(x.base)+(x.late>0?'':' · jatuh tempo '+fmtD(x.due)):'Tanggal Invoice & PO kosong'}</small></td></tr>`;
   });
   h+=`</tbody></table>`;
   reminderRows_=rows.map(x=>({salesId:x.r.salesId,type:x.type,customer:x.r.customer||''}));
