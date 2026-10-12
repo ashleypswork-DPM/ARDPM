@@ -123,7 +123,7 @@ tr.row-warn td{background:#fff3bf !important;}
 .reminder-sum{font-size:13px;color:var(--text);margin-bottom:10px;}
 .reminder-sum b{color:#c62828;}
 .reminder-list table{width:100%;border-collapse:collapse;font-size:12.5px;}
-.reminder-list th{background:#fdecea;color:#a33;text-align:left;padding:7px 9px;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;position:sticky;top:0;}
+.reminder-list th{background:#fbf3f2;color:#a33;text-align:left;padding:6px 9px;font-size:10px;text-transform:uppercase;letter-spacing:.3px;}
 .reminder-list td{padding:8px 9px;border-bottom:1px solid #f3e1e0;vertical-align:top;}
 .reminder-list td.amt{text-align:right;font-weight:700;color:#c62828;white-space:nowrap;}
 .reminder-list a{font-weight:700;color:var(--primary);cursor:pointer;}
@@ -133,6 +133,20 @@ tr.row-warn td{background:#fff3bf !important;}
 .reminder-note{font-size:10.5px;color:var(--text-light);margin:10px 0 4px;}
 .late-badge.late-soft{background:#f1f4f8;color:#5b6b80;border-color:#d9e0ea;}
 .reminder-list small.never-paid{color:#c62828;font-weight:700;}
+.reminder-list{max-height:42vh;overflow-y:auto;border:1px solid #f0d6d4;border-radius:10px;}
+.rem-cust{border-bottom:1px solid #f3e1e0;}
+.rem-cust:last-child{border-bottom:none;}
+.rem-cust summary{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;list-style:none;font-size:13px;}
+.rem-cust summary::-webkit-details-marker{display:none;}
+.rem-cust summary::before{content:'▸';color:#c62828;font-size:12px;transition:transform .15s;}
+.rem-cust[open] summary::before{transform:rotate(90deg);}
+.rem-cust summary:hover{background:#fff6f5;}
+.rem-cust[open] summary{background:#fdecea;}
+.rem-name{font-weight:700;color:var(--primary);flex:1;min-width:0;}
+.rem-meta{font-size:11px;color:var(--text-light);white-space:nowrap;}
+.rem-amt{font-weight:700;color:#c62828;white-space:nowrap;}
+.rem-cust table{margin:0 0 6px;}
+.rem-cust td:first-child,.rem-cust th:first-child{padding-left:30px;}
 .reminder-foot{padding:10px 20px 14px;display:flex;justify-content:flex-end;border-top:1px solid var(--border);}
 @media (max-width:860px){ .reminder-box{width:94vw;} }
 @media (max-width:860px){ .form-spacer{display:none;} }
@@ -502,7 +516,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
     <div class="reminder-body">
       <p id="reminder-sum" class="reminder-sum"></p>
       <div class="reminder-list" id="reminder-list"></div>
-      <p class="reminder-note">Jatuh tempo = 1 bulan setelah pembayaran terakhir (atau setelah Tanggal Invoice / Tanggal PO kalau belum ada pembayaran). Transaksi yang belum pernah dibayar selalu ditampilkan. Klik nama customer untuk membuka transaksinya.</p>
+      <p class="reminder-note">Berisi semua transaksi yang belum lunas. Jatuh tempo = 1 bulan setelah pembayaran terakhir (atau setelah Tanggal Invoice / Tanggal PO kalau belum pernah bayar). Klik "Buka" untuk membuka transaksinya.</p>
     </div>
     <div class="reminder-foot"><button class="btn btn-primary" onclick="closeModal('modal-reminder')">Tutup</button></div>
   </div>
@@ -1369,24 +1383,25 @@ function addOneMonth_(d){ // 31 Jan + 1 bulan = 28/29 Feb (tidak loncat ke Maret
   const last=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();
   t.setDate(Math.min(d.getDate(),last)); return t;
 }
-// Transaksi belum lunas yang sudah lewat 1 bulan dari pembayaran terakhir
+// SEMUA transaksi yang belum lunas (status bukan LUNAS, atau LUNAS tapi pembayarannya masih kurang),
+// lengkap dengan perhitungan jatuh tempo: 1 bulan setelah pembayaran terakhir
+// (atau setelah Tanggal Invoice / Tanggal PO kalau belum pernah bayar).
 function overdueList_(){
   const today=new Date(); today.setHours(0,0,0,0);
   const out=[];
   [['mesin',db.mesin],['spare',db.spare]].forEach(([type,arr])=>(arr||[]).forEach(r=>{
-    if(r.status==='LUNAS') return;
     const pays=r.payments||[];
     const paid=pays.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
-    const sisa=(Number(r.total)||0)-paid-(Number(r.pph)||0)-(Number(r.admin)||0);
-    if(sisa<1) return;
+    const sisaHitung=(Number(r.total)||0)-paid-(Number(r.pph)||0)-(Number(r.admin)||0);
+    // Sisa yang masih harus dibayar; transaksi yang sisanya 0 tidak ditampilkan
+    const sisa = sisaHitung>=1 ? sisaHitung : (r.status!=='LUNAS' ? (Number(r.ar)||0) : 0);
+    const belumLunas = sisa>=1 && (r.status!=='LUNAS' || pays.length>0);
+    if(!belumLunas) return;
     const payDates=pays.map(p=>isoToDate_(p.tgl)).filter(Boolean).sort((a,b)=>a-b);
-    const hasPay=payDates.length>0;
-    const base=hasPay?payDates[payDates.length-1]:(isoToDate_(r.tglInv)||isoToDate_(r.tglPO));
-    // Yang belum pernah bayar sama sekali SELALU masuk daftar (walau belum jatuh tempo / tanpa tanggal)
-    if(!base){ if(!hasPay) out.push({r,type,sisa,base:null,due:null,late:-1,hasPay}); return; }
-    const due=addOneMonth_(base);
-    const late=Math.round((today-due)/86400000);
-    if(late<=0 && hasPay) return;
+    const hasPay=pays.length>0;
+    const base=payDates.length?payDates[payDates.length-1]:(isoToDate_(r.tglInv)||isoToDate_(r.tglPO));
+    const due=base?addOneMonth_(base):null;
+    const late=due?Math.round((today-due)/86400000):null;
     out.push({r,type,sisa,base,due,late,hasPay});
   }));
   return out;
@@ -1394,30 +1409,44 @@ function overdueList_(){
 function showPaymentReminder(){
   const list=overdueList_();
   if(!list.length) return;
-  // 1 baris = 1 transaksi, urut dari yang paling lama terlambat
-  const rows=list.sort((a,b)=>b.late-a.late);   // paling lama terlambat di atas; belum jatuh tempo / tanpa tanggal di bawah
-  const nNever=rows.filter(x=>!x.hasPay).length;
-  const total=rows.reduce((a,x)=>a+x.sisa,0);
-  const nCust=new Set(rows.map(x=>String(x.r.customer||'').trim().toLowerCase())).size;
   const salesName=id=>{ const s=db.sales.find(x=>x.id===id); return s?s.nama:'-'; };
   const fmtD=d=>`${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`;
-  document.getElementById('reminder-sum').innerHTML=`<b>${rows.length} transaksi</b> dari <b>${nCust} customer</b> belum lunas dan perlu ditagih${nNever?` (${nNever} di antaranya <b>belum pernah bayar</b>)`:''}, total belum lunas <b>${fmt(Math.round(total))}</b>.`;
-  let h=`<table><thead><tr><th>Customer</th><th>No Invoice Induk</th><th>Nama PIC</th><th>Nama Barang</th><th style="text-align:right">Belum Lunas</th><th>Terlambat</th></tr></thead><tbody>`;
-  rows.forEach((x,i)=>{
-    const r=x.r, items=r.items||[];
-    const barang=(items[0]&&items[0].barang)||r.barang||'-';
-    h+=`<tr><td><a onclick="openReminderItem_(${i})">${escAttr_(r.customer)||'-'}</a>
-        <small>${x.type==='mesin'?'Mesin':'Sparepart/Jasa'} · Sales ${escAttr_(salesName(r.salesId))}</small></td>
-      <td>${escAttr_(String(r.noInv||'').trim())||'-'}</td>
-      <td>${escAttr_(String(r.pic||'').trim())||'-'}</td>
-      <td>${escAttr_(barang)}${items.length>1?`<small>+${items.length-1} barang lain</small>`:''}</td>
-      <td class="amt">${fmt(Math.round(x.sisa))}</td>
-      <td>${x.late>0?`<span class="late-badge">${x.late} hari</span>`:`<span class="late-badge late-soft">${x.base?'Belum jatuh tempo':'Tanpa tanggal'}</span>`}
-        ${!x.hasPay?`<small class="never-paid">Belum pernah bayar</small>`:''}
-        <small>${x.base?(x.hasPay?'Bayar terakhir ':'Invoice/PO ')+fmtD(x.base)+(x.late>0?'':' · jatuh tempo '+fmtD(x.due)):'Tanggal Invoice & PO kosong'}</small></td></tr>`;
+  const lateVal=x=>x.late===null?-99999:x.late;
+  // Kelompokkan per customer (dropdown), isinya daftar transaksi
+  const groups=new Map();
+  list.forEach(x=>{
+    const key=String(x.r.customer||'-').trim().toLowerCase();
+    if(!groups.has(key)) groups.set(key,{customer:String(x.r.customer||'-').trim()||'-',items:[],sisa:0,maxLate:-99999});
+    const g=groups.get(key); g.items.push(x); g.sisa+=x.sisa; g.maxLate=Math.max(g.maxLate,lateVal(x));
   });
-  h+=`</tbody></table>`;
-  reminderRows_=rows.map(x=>({salesId:x.r.salesId,type:x.type,customer:x.r.customer||''}));
+  const custs=[...groups.values()].sort((a,b)=>(b.maxLate-a.maxLate)||(b.sisa-a.sisa));
+  const total=list.reduce((a,x)=>a+x.sisa,0);
+  const nLate=custs.filter(g=>g.maxLate>0).length;
+  reminderRows_=[];
+  document.getElementById('reminder-sum').innerHTML=`<b>${custs.length} customer</b> (${list.length} transaksi) belum lunas, total <b>${fmt(Math.round(total))}</b>. ${nLate} customer sudah lewat jatuh tempo. Klik nama customer untuk melihat rinciannya.`;
+  let h='';
+  custs.forEach(g=>{
+    g.items.sort((a,b)=>lateVal(b)-lateVal(a));
+    const badge=g.maxLate>0?`<span class="late-badge">Terlambat ${g.maxLate} hari</span>`:`<span class="late-badge late-soft">${g.maxLate===-99999?'Tanpa tanggal':'Belum jatuh tempo'}</span>`;
+    h+=`<details class="rem-cust"><summary><span class="rem-name">${escAttr_(g.customer)}</span>
+        <span class="rem-meta">${g.items.length} transaksi</span><span class="rem-amt">${fmt(Math.round(g.sisa))}</span>${badge}</summary>
+      <table><thead><tr><th>No Invoice Induk</th><th>Nama PIC</th><th>Nama Barang</th><th style="text-align:right">Belum Lunas</th><th>Terlambat</th><th></th></tr></thead><tbody>`;
+    g.items.forEach(x=>{
+      const r=x.r, items=r.items||[];
+      const barang=(items[0]&&items[0].barang)||r.barang||'-';
+      const idx=reminderRows_.push({salesId:r.salesId,type:x.type,customer:r.customer||''})-1;
+      const terlambat = x.late===null ? `<span class="late-badge late-soft">Tanpa tanggal</span><small>Tanggal Invoice &amp; PO kosong</small>`
+        : x.late>0 ? `<span class="late-badge">${x.late} hari</span><small>${x.hasPay?'Bayar terakhir':'Invoice/PO'} ${fmtD(x.base)}</small>`
+        : `<span class="late-badge late-soft">Belum jatuh tempo</span><small>Jatuh tempo ${fmtD(x.due)}</small>`;
+      h+=`<tr><td>${escAttr_(String(r.noInv||'').trim())||'-'}<small>${x.type==='mesin'?'Mesin':'Sparepart/Jasa'} · Sales ${escAttr_(salesName(r.salesId))}</small></td>
+        <td>${escAttr_(String(r.pic||'').trim())||'-'}</td>
+        <td>${escAttr_(barang)}${items.length>1?`<small>+${items.length-1} barang lain</small>`:''}</td>
+        <td class="amt">${fmt(Math.round(x.sisa))}</td>
+        <td>${terlambat}${!x.hasPay?`<small class="never-paid">Belum pernah bayar</small>`:''}</td>
+        <td><a onclick="openReminderItem_(${idx})">Buka</a></td></tr>`;
+    });
+    h+=`</tbody></table></details>`;
+  });
   document.getElementById('reminder-list').innerHTML=h;
   openModal('modal-reminder');
 }
