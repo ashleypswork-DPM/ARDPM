@@ -40,6 +40,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .city-header-left{display:flex;align-items:center;gap:5px;}
 .btn-del-city{background:none;border:none;color:rgba(255,100,100,.4);font-size:11px;cursor:pointer;padding:1px 4px;border-radius:3px;transition:.15s;opacity:0;}
 .city-group:hover .btn-del-city{opacity:1;}
+.city-header{cursor:pointer;user-select:none;border-radius:6px;}
+.city-header:hover{background:rgba(255,255,255,.05);}
+.city-caret{display:inline-block;width:10px;font-size:9px;transition:transform .15s;}
+.city-group.open .city-caret{transform:rotate(90deg);}
+.city-group:not(.open) .sales-row{display:none;}
+.city-badge{background:var(--accent);color:#fff;font-size:9px;padding:1px 5px;border-radius:10px;font-weight:700;letter-spacing:0;margin-left:4px;}
+.city-group.open .city-badge{display:none;}
 .btn-del-city:hover{background:rgba(231,76,60,.2);color:#ff6b6b;}
 
 .sales-row{display:flex;align-items:center;padding:0 6px 2px;}
@@ -1148,15 +1155,25 @@ function deleteLocation(loc){
 // ═══════════════════════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════════════════════
+// Lokasi di sidebar bisa dibuka/tutup (default tertutup: hanya nama lokasi yang terlihat)
+let openCities_=new Set();
+try{ openCities_=new Set(JSON.parse(localStorage.getItem('ar_open_cities')||'[]')); }catch(e){}
+function toggleCity_(i){
+  const city=db.locations[i]; if(city===undefined) return;
+  if(openCities_.has(city)) openCities_.delete(city); else openCities_.add(city);
+  try{ localStorage.setItem('ar_open_cities',JSON.stringify([...openCities_])); }catch(e){}
+  renderSidebar();
+}
 function renderSidebar(){
   const sc=document.getElementById('sidebar-content');
   let html='';
-  db.locations.forEach(city=>{
+  db.locations.forEach((city,ci)=>{
     const cityS=db.sales.filter(s=>s.kota===city);
-    html+=`<div class="city-group">
-      <div class="city-header">
-        <div class="city-header-left">${getCityIcon(city)} ${city}</div>
-        <button class="btn-del-city" onclick="requireAuth(deleteLocation,'${city.replace(/'/g,"\\'")}')" title="Hapus lokasi">✕</button>
+    const cityTot=cityS.reduce((a,s)=>a+db.mesin.filter(m=>m.salesId===s.id&&m.status!=='LUNAS').length+db.spare.filter(m=>m.salesId===s.id&&m.status!=='LUNAS').length,0);
+    html+=`<div class="city-group ${openCities_.has(city)?'open':''}">
+      <div class="city-header" onclick="toggleCity_(${ci})" title="Klik untuk menampilkan / menyembunyikan nama sales">
+        <div class="city-header-left"><span class="city-caret">▶</span>${getCityIcon(city)} ${city}${cityTot>0?`<span class="city-badge">${cityTot}</span>`:''}</div>
+        <button class="btn-del-city" onclick="event.stopPropagation();requireAuth(deleteLocation,'${city.replace(/'/g,"\\'")}')" title="Hapus lokasi">✕</button>
       </div>`;
     cityS.forEach(s=>{
       const tot=db.mesin.filter(m=>m.salesId===s.id&&m.status!=='LUNAS').length
@@ -1285,7 +1302,7 @@ function buildPie(segments){
 // ═══════════════════════════════════════════════════════
 // SELECT SALES / RENDER MAIN
 // ═══════════════════════════════════════════════════════
-function selectSales(id){ currentSalesId=id; mesinPage=1; sparePage=1; mesinSearchQ=''; spareSearchQ=''; mesinFilterSel=''; spareFilterSel=''; renderSidebar(); renderMain(); closeSidebarMobile(); }
+function selectSales(id){ const sl=db.sales.find(s=>s.id===id); if(sl&&!openCities_.has(sl.kota)) openCities_.add(sl.kota); currentSalesId=id; mesinPage=1; sparePage=1; mesinSearchQ=''; spareSearchQ=''; mesinFilterSel=''; spareFilterSel=''; renderSidebar(); renderMain(); closeSidebarMobile(); }
 function renderMain(){
   const sales=db.sales.find(s=>s.id===currentSalesId);
   if(!sales) return;
