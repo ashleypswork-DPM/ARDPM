@@ -211,7 +211,8 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .inv-pick-btn .inv-pick-amt{font-weight:700;color:var(--primary);white-space:nowrap;}
 /* Form Mesin/Spare dilebarkan supaya tabel History Pembayaran (dengan kolom No Invoice) muat */
 #modal-mesin .modal,#modal-spare .modal{max-width:900px;}
-#m-pay-list,#s-pay-list{overflow-x:auto;}
+#m-pay-list,#s-pay-list,#m-plan-list,#s-plan-list{overflow-x:auto;}
+#m-plan-list .pay-list th,#m-plan-list .pay-list td,#s-plan-list .pay-list th,#s-plan-list .pay-list td{padding-left:6px;padding-right:6px;}
 #m-pay-list .pay-list th,#m-pay-list .pay-list td,#s-pay-list .pay-list th,#s-pay-list .pay-list td{padding-left:6px;padding-right:6px;}
 
 /* UPLOAD BUKTI */
@@ -284,6 +285,13 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .ar-value.ar-nol{color:var(--lunas);}
 .ar-value.ar-lebih{color:#d35400;}
 .ar-hint{display:block;margin-top:4px;font-size:11px;color:var(--text-light);line-height:1.35;}
+.plan-divider{color:#c62828 !important;margin-top:18px;}
+.plan-list input{color:#c62828 !important;font-weight:600;border-color:#f3c4c0 !important;}
+.plan-list td.pay-label{color:#c62828;}
+.plan-paid-btn{background:#e8f8ef;border:1px solid var(--lunas);color:var(--lunas);padding:3px 8px;border-radius:4px;cursor:pointer;font-size:10.5px;font-weight:700;white-space:nowrap;font-family:inherit;}
+.plan-paid-btn:hover{background:var(--lunas);color:#fff;}
+.plan-add-btn{color:#c62828;border-color:#f3c4c0;}
+.plan-detail td{color:#c62828;}
 .ar-hint.ok{color:var(--lunas);font-weight:600;}
 .ar-hint.kurang{color:#b45309;font-weight:600;}
 .ar-hint.lebih{color:#c62828;font-weight:700;}
@@ -580,6 +588,9 @@ tbody td{padding:8px 11px;vertical-align:top;}
       <div class="section-divider">History Pembayaran</div>
       <div id="m-pay-list"></div>
       <button class="btn btn-outline" style="margin-top:8px;font-size:11px" onclick="addPayRow('mesin')">+ Tambah Baris Pembayaran</button>
+      <div class="section-divider plan-divider">Rencana Pembayaran <span style="font-weight:400;color:var(--text-light);text-transform:none;letter-spacing:0">— klik "Sudah Dibayar" untuk memindahkan ke History Pembayaran</span></div>
+      <div id="m-plan-list"></div>
+      <button class="btn btn-outline plan-add-btn" style="margin-top:8px;font-size:11px" onclick="addPlanRow('mesin')">+ Tambah Rencana Pembayaran</button>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-mesin')">Batal</button>
@@ -634,6 +645,9 @@ tbody td{padding:8px 11px;vertical-align:top;}
       <div class="section-divider">History Pembayaran</div>
       <div id="s-pay-list"></div>
       <button class="btn btn-outline" style="margin-top:8px;font-size:11px" onclick="addPayRow('spare')">+ Tambah Baris Pembayaran</button>
+      <div class="section-divider plan-divider">Rencana Pembayaran <span style="font-weight:400;color:var(--text-light);text-transform:none;letter-spacing:0">— klik "Sudah Dibayar" untuk memindahkan ke History Pembayaran</span></div>
+      <div id="s-plan-list"></div>
+      <button class="btn btn-outline plan-add-btn" style="margin-top:8px;font-size:11px" onclick="addPlanRow('spare')">+ Tambah Rencana Pembayaran</button>
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('modal-spare')">Batal</button>
@@ -1701,6 +1715,12 @@ async function showPayDetail(id,type){
     }
   } else h+=`<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Belum ada history</td></tr>`;
   h+=`</tbody></table>`;
+  if((r.planned||[]).length){
+    h+=`<p class="text-sm" style="margin:14px 0 4px;color:#c62828;font-weight:700">Rencana Pembayaran</p>
+      <table class="pay-list plan-detail"><thead><tr><th>Rencana</th><th>No Invoice</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Keterangan</th></tr></thead><tbody>`;
+    r.planned.forEach((p,i)=>{ h+=`<tr><td class="pay-label">Rencana ${i+1}</td><td>${escAttr_(p.noInv)||'-'}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${escAttr_(p.rek)||'-'}</td><td>${escAttr_(p.ket)||'-'}</td></tr>`; });
+    h+=`</tbody></table>`;
+  }
   document.getElementById('paydetail-body').innerHTML=h;
   openModal('modal-paydetail');
 }
@@ -1743,6 +1763,37 @@ function removePayRow(i,prefix){
   renderPayRows(prefix);
 }
 let pendingPayPrefix=null;
+// ── RENCANA PEMBAYARAN (belum dibayar, tulisan merah) ──
+let planRows=[];
+function renderPlanRows(prefix){
+  const el=document.getElementById(prefix==='mesin'?'m-plan-list':'s-plan-list'); if(!el) return;
+  if(!planRows.length){ el.innerHTML='<p style="font-size:11px;color:var(--text-light);margin:6px 0 0">Belum ada rencana pembayaran.</p>'; return; }
+  const inp=(i,key,type,w,ph)=>`<input type="${type}" value="${escAttr_(planRows[i][key]||'')}" placeholder="${ph||''}" oninput="planRows[${i}].${key}=${type==='number'?'Number(this.value)':'this.value'}" style="padding:4px;border-radius:4px;font-size:11px;width:${w}px">`;
+  let h=`<table class="pay-list plan-list"><thead><tr><th>Rencana</th><th>No Invoice</th><th>Tanggal</th><th>Jumlah (Rp)</th><th>Rekening</th><th>Keterangan</th><th></th><th></th></tr></thead><tbody>`;
+  planRows.forEach((p,i)=>{
+    h+=`<tr><td class="pay-label">Rencana ${i+1}</td><td>${inp(i,'noInv','text',110,'No Invoice')}</td><td>${inp(i,'tgl','date',120)}</td><td>${inp(i,'jumlah','number',110)}</td>
+      <td>${inp(i,'rek','text',100)}</td><td>${inp(i,'ket','text',100)}</td>
+      <td><button class="plan-paid-btn" onclick="markPlanPaid(${i},'${prefix}')" title="Pindahkan ke History Pembayaran">✓ Sudah Dibayar</button></td>
+      <td><button onclick="removePlanRow(${i},'${prefix}')" style="background:#fdecea;border:none;color:#e74c3c;padding:3px 7px;border-radius:4px;cursor:pointer;font-size:11px">✕</button></td></tr>`;
+  });
+  el.innerHTML=h+`</tbody></table>`;
+}
+function addPlanRow(prefix){ planRows.push({noInv:'',tgl:'',jumlah:0,rek:'',ket:''}); renderPlanRows(prefix); }
+function removePlanRow(i,prefix){ planRows.splice(i,1); renderPlanRows(prefix); }
+// Pindahkan rencana ke History Pembayaran; nomornya otomatis melanjutkan nomor terakhir
+function markPlanPaid(i,prefix){
+  const p=planRows[i]; if(!p) return;
+  if(!(Number(p.jumlah)>0)){ toast('Isi Jumlah rencana pembayaran dulu','error'); return; }
+  if(!p.tgl){ const d=new Date(); p.tgl=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+  payRows.push({tgl:p.tgl,jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||'',noInv:p.noInv||'',_imgPreview:null,_hasImg:false});
+  planRows.splice(i,1);
+  renderPayRows(prefix); renderPlanRows(prefix);
+  toast(`Dipindahkan ke History Pembayaran sebagai ${payLabel_(payRows.length-1,payHasDP_(payRows))}. Jangan lupa klik Simpan.`);
+}
+function cleanPlans_(list){
+  return (list||[]).filter(p=>(Number(p.jumlah)||0)>0||p.tgl).map(p=>({noInv:p.noInv||'',tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||''}));
+}
+
 function addPayRow(prefix){
   // Baris pertama: tanya dulu, ini DP atau langsung Pembayaran 1.
   if(!payRows.length){ pendingPayPrefix=prefix; openModal('modal-paytype'); return; }
@@ -1899,6 +1950,7 @@ function openAddMesin(){
   const s=db.sales.find(x=>x.id===currentSalesId);
   if(s) document.getElementById('m-sales').value=s.nama;
   addItemRow('mesin'); // mulai dengan 1 baris kosong biar langsung siap diisi
+  planRows=[]; renderPlanRows('mesin');
   renderPayRows('mesin'); openModal('modal-mesin');
 }
 async function editMesin(id){
@@ -1937,6 +1989,7 @@ async function editMesin(id){
   document.getElementById('m-pph').value=r.pph||0;
   document.getElementById('m-admin').value=r.admin||0;
   document.getElementById('m-ar').value=r.ar||'';
+  planRows=(r.planned||[]).map(p=>({...p})); renderPlanRows('mesin');
   renderItemRows('mesin'); renderPayRows('mesin'); openModal('modal-mesin');
 }
 async function saveMesin(){
@@ -1951,6 +2004,7 @@ async function saveMesin(){
   const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,admin:Number(document.getElementById('m-admin').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
+  data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
   syncArStatus_(data,true);   // A/R & status mengikuti History Pembayaran
   const finalId=editingId||uid();
   if(editingId){const idx=db.mesin.findIndex(m=>m.id===editingId);db.mesin[idx]={...db.mesin[idx],...data};}
@@ -1998,6 +2052,7 @@ function openAddSpare(){
   const s=db.sales.find(x=>x.id===currentSalesId);
   if(s) document.getElementById('s-pic-handled').value=s.nama;
   addItemRow('spare'); // mulai dengan 1 baris kosong
+  planRows=[]; renderPlanRows('spare');
   renderPayRows('spare');openModal('modal-spare');
 }
 async function editSpare(id){
@@ -2032,6 +2087,7 @@ async function editSpare(id){
   document.getElementById('s-admin').value=r.admin||0;
   document.getElementById('s-ket').value=r.ket||'';
   document.getElementById('s-ar').value=r.ar||'';
+  planRows=(r.planned||[]).map(p=>({...p})); renderPlanRows('spare');
   renderItemRows('spare'); renderPayRows('spare');openModal('modal-spare');
 }
 async function saveSpare(){
@@ -2047,6 +2103,7 @@ async function saveSpare(){
   const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,admin:Number(document.getElementById('s-admin').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
+  data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
   syncArStatus_(data,true);   // A/R & status mengikuti History Pembayaran
   const finalId=editingId||uid();
   if(editingId){const idx=db.spare.findIndex(m=>m.id===editingId);db.spare[idx]={...db.spare[idx],...data};}
