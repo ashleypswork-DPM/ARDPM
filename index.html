@@ -634,7 +634,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Discount (Rp)</label><input type="number" id="s-discount" placeholder="0" min="0" oninput="calcSpareTotal()"></div>
         <div class="form-group"><label>TOTAL (Rp) — DPP − Discount + PPN</label><input type="number" id="s-total" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>Status</label><select id="s-status" onchange="calcArAuto_('spare')"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select></div>
-        <div class="form-group"><label>Jadwal Pay</label><input type="date" id="s-jadwal-pay"></div>
+        <div class="form-group"><label>Tanggal Lunas</label><input type="date" id="s-jadwal-pay"></div>
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="s-tgl-kirim"></div>
         <div class="form-group"><label>Tanggal Pasang</label><input type="date" id="s-tgl-pasang"></div>
         <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="s-ar" placeholder="0"><small class="ar-hint" id="s-ar-hint"></small></div>
@@ -1686,7 +1686,7 @@ async function renderSpareTableBody(){
   const pageRecords=filtered.slice((sparePage-1)*PAGE_SIZE, sparePage*PAGE_SIZE);
 
   let html=issuesBannerHTML_(filtered,sparePage,'spare')+`<div class="table-scroll"><table id="table-spare">
-    <thead><tr><th>No</th><th>Tgl PO</th><th>No INV</th><th>Customer</th><th>PIC Handled</th><th>Nama Barang</th><th>Jenis</th><th>QTY</th><th>Jml Barang</th><th>TOTAL</th><th>History Pay</th><th>Status</th><th>A/R</th><th>Jadwal Pay</th><th>Aksi</th></tr></thead>
+    <thead><tr><th>No</th><th>Tgl PO</th><th>No INV</th><th>Customer</th><th>PIC Handled</th><th>Nama Barang</th><th>Jenis</th><th>QTY</th><th>Jml Barang</th><th>TOTAL</th><th>History Pay</th><th>Status</th><th>A/R</th><th>Tgl Lunas</th><th>Aksi</th></tr></thead>
     <tbody id="tbody-spare">`;
   for(const [i,r] of pageRecords.entries()){
     const chips=await renderPayChips(r.payments,r.id,'spare');
@@ -2174,7 +2174,6 @@ const IMP_TRX_COLS = [
   {key:'admin',     h:'Biaya Admin',     w:14, num:true},
   {key:'status',    h:'Status',          w:13},
   {key:'tglLunas',  h:'Tgl Lunas',       w:12, date:true},
-  {key:'jadwalPay', h:'Jadwal Pay',      w:12, date:true},
   {key:'tglKirim',  h:'Tgl Kirim',       w:12, date:true},
   {key:'tglSetup',  h:'Tgl Setup/Pasang',w:16, date:true},
   {key:'ar',        h:'A/R',             w:15, num:true},
@@ -2335,7 +2334,7 @@ function downloadImportTemplate(){
   for(let i=1;i<=AR_MESIN_PAY_COUNT;i++) mesinCols.push(['Payment '+roman(i),'n',15]);
   mesinCols.push(['STATUS','t',10],['Tanggal Lunas','d',11],['Ket','t',16],['Tanggal kirim','d',11],['Tanggal Set Up','d',11],['Jenis','t',8],['A/R','n',14],
     ['No PO','t',12,1],['No Invoice','t',16,1],['Tanggal Inv','d',11,1],['Alamat','t',26,1],['Discount','n',14,1],['PPh Jasa','n',14,1],['Biaya Admin','n',14,1]);
-  const spareCols=[['No.','t',6],['Tanggal PO','d',11],['NO PO','t',12],['NO INV','t',16],['TANGGAL INV','d',11],['FP','t',7],['PIC Handled','t',11],['CUST','t',20],['PIC','t',13],['NAMA BARANG','t',28],['JENIS','t',10],['QTY','n',6],['No. Seri','t',10],['HARGA PER PC','n',13],['DPP','n',13],['PPN','n',12],['TOTAL','n',14],['Detail Payment','n',14],['Tanggal Pay','d',11],['REK','t',9],['Ket Tf','t',12],['STATUS','t',9],['Jadwal pay','d',11],['Tanggal kirim','d',11],['Tanggal Pasang','d',11],['A/R','n',13],
+  const spareCols=[['No.','t',6],['Tanggal PO','d',11],['NO PO','t',12],['NO INV','t',16],['TANGGAL INV','d',11],['FP','t',7],['PIC Handled','t',11],['CUST','t',20],['PIC','t',13],['NAMA BARANG','t',28],['JENIS','t',10],['QTY','n',6],['No. Seri','t',10],['HARGA PER PC','n',13],['DPP','n',13],['PPN','n',12],['TOTAL','n',14],['Detail Payment','n',14],['Tanggal Pay','d',11],['REK','t',9],['Ket Tf','t',12],['STATUS','t',9],['Tanggal Lunas','d',11],['Tanggal kirim','d',11],['Tanggal Pasang','d',11],['A/R','n',13],
     ['Sales','t',10,1],['Alamat','t',26,1],['Discount','n',13,1],['PPh Jasa','n',13,1],['Biaya Admin','n',13,1]];
   const build=(title,cols,rows)=>{
     const ws={}; const put=(r,c,cell)=>{ ws[XLSX.utils.encode_cell({r,c})]=cell; };
@@ -2533,7 +2532,7 @@ function buildArTransaction_(b,col,payCols,isMesin,sheetName){
     const raw=b.rows.map(row=>getCell_(row,col[k])).find(v=>!isBlank_(v)&&cleanTxt_(v)!=='');
     if(raw===undefined) return '';
     const d=excelDateToStr_(raw);
-    if(!d) importWarnings.push(`${where}: isian tanggal "${String(raw).trim()}" di kolom ${({tglKirim:'Tanggal Kirim',tglSetup:'Tanggal Set Up',tglPasang:'Tanggal Pasang',tglLunas:'Tanggal Lunas',tglInv:'Tanggal Inv',jadwalPay:'Jadwal Pay'})[k]||k} tidak terbaca sebagai tanggal (dikosongkan).`);
+    if(!d) importWarnings.push(`${where}: isian tanggal "${String(raw).trim()}" di kolom ${({tglKirim:'Tanggal Kirim',tglSetup:'Tanggal Set Up',tglPasang:'Tanggal Pasang',tglLunas:'Tanggal Lunas',tglInv:'Tanggal Inv',jadwalPay:'Tanggal Lunas'})[k]||k} tidak terbaca sebagai tanggal (dikosongkan).`);
     return d;
   };
   const fp=cleanTxt_(g(R0,'fp'));
@@ -2554,7 +2553,7 @@ function buildArTransaction_(b,col,payCols,isMesin,sheetName){
   } else {
     type='spare';
     const jenis=items.every(it=>/^jasa$/i.test(it.jenis))?'Jasa':'Sparepart';
-    rec={...common, fp, picHandled:cleanTxt_(g(R0,'picHandled')), jenis, harga:cleanItems[0].harga, jadwalPay:dt('jadwalPay'), tglPasang:dt('tglPasang')};
+    rec={...common, fp, picHandled:cleanTxt_(g(R0,'picHandled')), jenis, harga:cleanItems[0].harga, jadwalPay:dt('tglLunas')||dt('jadwalPay'), tglPasang:dt('tglPasang')};
   }
   importParsedRows.push({type, rec, kode, salesNama:sales?sales.nama:'', needDefaultSales:!sales});
 }
@@ -2683,7 +2682,7 @@ function parseImportNew_(trxRows, itemRows, payRowsX){
     };
     const rec = tx.jenis==='Mesin'
       ? {...common, sales:tx.salesNama, tglLunas:excelDateToStr_(t.tglLunas), tglSetup:excelDateToStr_(t.tglSetup), jenis:'Mesin'}
-      : {...common, picHandled:cleanTxt_(t.picHandled), jenis:tx.jenis, harga:tx.items[0].harga, jadwalPay:excelDateToStr_(t.jadwalPay), tglPasang:excelDateToStr_(t.tglSetup)};
+      : {...common, picHandled:cleanTxt_(t.picHandled), jenis:tx.jenis, harga:tx.items[0].harga, jadwalPay:excelDateToStr_(t.tglLunas), tglPasang:excelDateToStr_(t.tglSetup)};
     importParsedRows.push({type:tx.jenis==='Mesin'?'mesin':'spare', rec, kode:tx.kode, salesNama:tx.salesNama, needDefaultSales:!tx.salesId});
   });
   importInfo={skipped, items:importParsedRows.reduce((a,x)=>a+x.rec.items.length,0), pays:importParsedRows.reduce((a,x)=>a+x.rec.payments.length,0)};
@@ -3116,7 +3115,7 @@ function exportXLSX(){
     aoa.push([`REKAPITULASI PENJUALAN SPAREPARTS & JASA — ${ptNama}`]);
     aoa.push([`Tanggal: ${tglExport}  |  ${db.ptInfo.alamat||''}`]);
     aoa.push([]);
-    const hdr=['No.','Tgl PO','NO PO','NO INV','Tgl INV','PIC Handled','Customer','PIC Cust','NAMA BARANG','JENIS','QTY','No.Seri','Harga/PC','DPP','PPN','TOTAL','DP1','Tgl DP1','Rek','Ket TF','STATUS','Jadwal Pay','Tgl Kirim','Tgl Pasang','A/R'];
+    const hdr=['No.','Tgl PO','NO PO','NO INV','Tgl INV','PIC Handled','Customer','PIC Cust','NAMA BARANG','JENIS','QTY','No.Seri','Harga/PC','DPP','PPN','TOTAL','DP1','Tgl DP1','Rek','Ket TF','STATUS','Tgl Lunas','Tgl Kirim','Tgl Pasang','A/R'];
     aoa.push(hdr);
     db.locations.forEach(city=>{
       const cityS=db.sales.filter(s=>s.kota===city);
