@@ -574,7 +574,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Discount (Rp)</label><input type="number" id="m-discount" placeholder="0" min="0" oninput="calcMesinTotal()"></div>
         <div class="form-group"><label>TOTAL (Rp) — DPP − Discount + PPN</label><input type="number" id="m-total" readonly style="background:#f5f7fa"></div>
         <div class="form-group"><label>Status</label>
-          <select id="m-status"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select>
+          <select id="m-status" onchange="calcArAuto_('mesin')"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select>
         </div>
         <div class="form-group"><label>Tanggal Lunas</label><input type="date" id="m-tgl-lunas"></div>
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="m-tgl-kirim"></div>
@@ -632,7 +632,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>PPN (Rp)</label><input type="number" id="s-ppn" placeholder="0" oninput="calcSpareTotal()"></div>
         <div class="form-group"><label>Discount (Rp)</label><input type="number" id="s-discount" placeholder="0" min="0" oninput="calcSpareTotal()"></div>
         <div class="form-group"><label>TOTAL (Rp) — DPP − Discount + PPN</label><input type="number" id="s-total" readonly style="background:#f5f7fa"></div>
-        <div class="form-group"><label>Status</label><select id="s-status"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select></div>
+        <div class="form-group"><label>Status</label><select id="s-status" onchange="calcArAuto_('spare')"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select></div>
         <div class="form-group"><label>Jadwal Pay</label><input type="date" id="s-jadwal-pay"></div>
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="s-tgl-kirim"></div>
         <div class="form-group"><label>Tanggal Pasang</label><input type="date" id="s-tgl-pasang"></div>
@@ -912,12 +912,30 @@ function calcArAuto_(prefix){
   const rows=(typeof payRows!=='undefined'&&currentPayPrefix===prefix)?payRows:[];
   const paid=rows.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
   const anyPay=rows.some(p=>(Number(p.jumlah)||0)!==0);
+  const total=Number(g('total').value)||0;
   if(!anyPay){
-    arEl.readOnly=false; arEl.style.background='';
-    hint.className='ar-hint'; hint.textContent='Isi History Pembayaran supaya A/R dan status terhitung otomatis.';
+    // Belum ada History Pembayaran: A/R tetap otomatis.
+    // BELUM LUNAS / PROGRESS -> A/R = Total − PPh − Biaya Admin; LUNAS -> A/R 0.
+    const pph0=Number(g('pph').value)||0, adm0=Number(g('admin').value)||0;
+    arEl.readOnly=true; arEl.style.background='#f5f7fa';
+    if(stEl && stEl.value==='LUNAS'){
+      arEl.value=0;
+      hint.className='ar-hint ok';
+      hint.textContent='✅ Lunas (status dipilih manual, belum ada History Pembayaran). Sebaiknya isi History Pembayaran supaya tercatat.';
+    } else {
+      const sisa0=Math.round((total-pph0-adm0)*100)/100;
+      arEl.value=sisa0;
+      hint.className='ar-hint kurang';
+      hint.textContent=`Belum ada pembayaran — A/R = Total ${fmt(total)}${pph0?` − PPh ${fmt(pph0)}`:''}${adm0?` − Biaya Admin ${fmt(adm0)}`:''}. Isi History Pembayaran begitu ada pembayaran masuk.`;
+      // A/R lama yang dulu diisi manual (beda dengan hitungan) -> ingatkan sebelum tersimpan
+      const old=editingId?((prefix==='mesin'?db.mesin:db.spare).find(x=>x.id===editingId)):null;
+      if(old && !hasPayAmount_(old) && Math.abs((Number(old.ar)||0)-sisa0)>=1){
+        hint.className='ar-hint lebih';
+        hint.textContent+=` ⚠️ Sebelumnya A/R tersimpan ${fmt(Number(old.ar)||0)} (diisi manual). Kalau sebagian sudah dibayar, catat dulu di History Pembayaran sebelum Simpan supaya A/R tetap benar.`;
+      }
+    }
     return;
   }
-  const total=Number(g('total').value)||0;
   const pph=Number(g('pph').value)||0, adm=Number(g('admin').value)||0;
   const sisa=Math.round((total-paid-pph-adm)*100)/100;
   arEl.value=sisa; arEl.readOnly=true; arEl.style.background='#f5f7fa';
