@@ -809,7 +809,7 @@ let currentPayPrefix='mesin'; // track which modal is open for pay rows
 // Setiap kali script Apps Script diubah, WAJIB "Deploy > Manage
 // deployments > Edit (pensil) > New version" agar perubahan aktif.
 // ═══════════════════════════════════════════════════════
-const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbzsie3kpozgQ1mq33CI1X-6h2Wsl85jfJZOjnh5g5wD89pOmvZFJeThEXLwL1l9xKxu/exec";
+const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxx01kaZgX5Y-BG62t4jXF0MXEjYKiI66M-V3lGw6bOXx4mzGJA1vz5_Uslhl-lFuM/exec";
 let syncTimer = null;
 let appAuth = null; // {id,password} — cuma tersimpan di memori browser (RAM), hilang begitu tab ditutup/reload. Wajib login ulang tiap buka app dari awal.
 
@@ -2205,6 +2205,12 @@ function excelDateToStr_(val){
   if(m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
   m=/^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
   if(m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
+  m=/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2})$/.exec(s);            // 25/04/25
+  if(m) return `20${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+  // nama bulan (Indonesia/Inggris): 25-Apr-25, 25 April 2025, 25 Agu 2025, 25-Okt-2025
+  const BLN={jan:1,feb:2,mar:3,apr:4,mei:5,may:5,jun:6,jul:7,agu:8,agt:8,aug:8,sep:9,okt:10,oct:10,nov:11,nop:11,des:12,dec:12};
+  m=/^(\d{1,2})[\s\-\/.]+([a-zA-Z]{3,9})\.?[\s\-\/.,]+(\d{2,4})$/.exec(s);
+  if(m){ const b=BLN[m[2].toLowerCase().slice(0,3)]; if(b){ const y=m[3].length===2?'20'+m[3]:m[3]; return `${y}-${pad(b)}-${pad(m[1])}`; } }
   return '';
 }
 
@@ -2328,7 +2334,7 @@ const AR_ALIASES={
   no:['no'], tglPO:['tanggal po','tgl po'], sales:['sales'], customer:['customer','cust'], pic:['pic','pic cust'],
   barang:['nama barang'], jenis:['jenis'], qty:['qty'], seri:['no seri'], harga:['harga per pc','harga/pc','harga pc','harga/unit','harga'],
   dpp:['dpp'], ppn:['ppn'], total:['total'], status:['status'], tglLunas:['tanggal lunas','tgl lunas'], ket:['ket','keterangan'],
-  tglKirim:['tanggal kirim','tgl kirim'], tglSetup:['tanggal set up','tanggal setup','tgl setup','tgl set up'], tglPasang:['tanggal pasang','tgl pasang'],
+  tglKirim:['tanggal kirim','tgl kirim'], tglSetup:['tanggal set up','tanggal setup','tgl setup','tgl set up','tanggal set-up','tgl set-up','tanggal setting','tgl setting','tanggal instalasi','tgl instalasi','tanggal install','set up','setup'], tglPasang:['tanggal pasang','tgl pasang'],
   ar:['a/r','ar'], noPO:['no po'], noInv:['no inv','no invoice'], tglInv:['tanggal inv','tgl inv','tanggal invoice'], fp:['fp'],
   picHandled:['pic handled'], alamat:['alamat','alamat customer'], discount:['discount','diskon'], pph:['pph jasa','pph','pph 23','pph23'], admin:['biaya admin','admin','biaya adm','adm'],
   payJumlah:['detail payment','jumlah (rp)','jumlah','payment'], payTgl:['tanggal pay','tgl pay'], payRek:['rek','rekening'], payKet:['ket tf'],
@@ -2444,24 +2450,33 @@ function buildArTransaction_(b,col,payCols,isMesin,sheetName){
   const existingInv=new Set([...db.mesin,...db.spare].map(r=>String(r.noInv||'').trim().toLowerCase()).filter(Boolean));
   if(noInv && existingInv.has(noInv.toLowerCase())) importWarnings.push(`${where}: No Invoice "${noInv}" sudah ada di aplikasi (mungkin duplikat).`);
   if(paid+pph+admin>total && total>0) importWarnings.push(`${where}: jumlah pembayaran${pph||admin?' + PPh/biaya admin':''} melebihi Total.`);
+  // Tanggal: pakai isian di baris pertama transaksi; kalau kosong, ambil dari baris lanjutan.
+  const dt=k=>{
+    if(col[k]===-1) return '';
+    const raw=b.rows.map(row=>getCell_(row,col[k])).find(v=>!isBlank_(v)&&cleanTxt_(v)!=='');
+    if(raw===undefined) return '';
+    const d=excelDateToStr_(raw);
+    if(!d) importWarnings.push(`${where}: isian tanggal "${String(raw).trim()}" di kolom ${({tglKirim:'Tanggal Kirim',tglSetup:'Tanggal Set Up',tglPasang:'Tanggal Pasang',tglLunas:'Tanggal Lunas',tglInv:'Tanggal Inv',jadwalPay:'Jadwal Pay'})[k]||k} tidak terbaca sebagai tanggal (dikosongkan).`);
+    return d;
+  };
   const fp=cleanTxt_(g(R0,'fp'));
   const ket=[cleanTxt_(g(R0,'ket')), fp?'FP: '+fp:''].filter(Boolean).join(' — ');
   const cleanItems=items.map(it=>({barang:it.barang,qty:it.qty,harga:it.harga,seri:it.seri}));
   const common={
-    id:uid(), salesId:sales?sales.id:'', tglPO:excelDateToStr_(g(R0,'tglPO')), noPO:cleanTxt_(g(R0,'noPO')), noInv, tglInv:excelDateToStr_(g(R0,'tglInv')),
+    id:uid(), salesId:sales?sales.id:'', tglPO:excelDateToStr_(g(R0,'tglPO')), noPO:cleanTxt_(g(R0,'noPO')), noInv, tglInv:dt('tglInv'),
     customer, pic:cleanTxt_(g(R0,'pic')), alamat:cleanTxt_(g(R0,'alamat')),
     barang:cleanItems.map(it=>it.barang).join(', '), qty:cleanItems.reduce((a,it)=>a+it.qty,0),
     seri:cleanItems.map(it=>it.seri).filter(Boolean).join(', '),
-    items:cleanItems, dpp, ppn, discount, pph, admin, total, status, ket, tglKirim:excelDateToStr_(g(R0,'tglKirim')), ar, payments
+    items:cleanItems, dpp, ppn, discount, pph, admin, total, status, ket, tglKirim:dt('tglKirim'), ar, payments
   };
   let rec, type;
   if(isMesin){
     type='mesin';
-    rec={...common, sales:sales?sales.nama:'', tglLunas:excelDateToStr_(g(R0,'tglLunas')), tglSetup:excelDateToStr_(g(R0,'tglSetup')), jenis:'Mesin'};
+    rec={...common, sales:sales?sales.nama:'', tglLunas:dt('tglLunas'), tglSetup:dt('tglSetup'), jenis:'Mesin'};
   } else {
     type='spare';
     const jenis=items.every(it=>/^jasa$/i.test(it.jenis))?'Jasa':'Sparepart';
-    rec={...common, picHandled:cleanTxt_(g(R0,'picHandled')), jenis, harga:cleanItems[0].harga, jadwalPay:excelDateToStr_(g(R0,'jadwalPay')), tglPasang:excelDateToStr_(g(R0,'tglPasang'))};
+    rec={...common, picHandled:cleanTxt_(g(R0,'picHandled')), jenis, harga:cleanItems[0].harga, jadwalPay:dt('jadwalPay'), tglPasang:dt('tglPasang')};
   }
   importParsedRows.push({type, rec, kode, salesNama:sales?sales.nama:'', needDefaultSales:!sales});
 }
