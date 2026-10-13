@@ -618,6 +618,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>No. PO</label><input type="text" id="s-no-po" placeholder="-"></div>
         <div class="form-group"><label>No. Invoice</label><input type="text" id="s-no-inv" placeholder="xxx/DPM/2025"></div>
         <div class="form-group"><label>Tanggal Invoice</label><input type="date" id="s-tgl-inv"></div>
+        <div class="form-group"><label>FP</label><input type="text" id="s-fp" placeholder="Contoh: DONE"></div>
         <div class="form-group"><label>PIC Handled</label><input type="text" id="s-pic-handled" placeholder="Nama PIC"></div>
         <div class="form-group"><label>Customer</label><input type="text" id="s-customer" placeholder="Nama Customer"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="s-pic" placeholder="Nama PIC"></div>
@@ -2061,7 +2062,7 @@ function calcSpareTotal(){
 function openAddSpare(){
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-spare-title').textContent='Tambah Penjualan Spareparts';
-  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-pic-handled','s-customer','s-pic','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
+  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-fp','s-pic-handled','s-customer','s-pic','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
   ['s-dpp','s-ppn','s-discount','s-total','s-ar','s-pph','s-admin'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s-status').value='BELUM';
   document.getElementById('s-pph').value=0;
@@ -2089,6 +2090,7 @@ async function editSpare(id){
   document.getElementById('s-no-po').value=r.noPO||'';
   document.getElementById('s-no-inv').value=r.noInv||'';
   document.getElementById('s-tgl-inv').value=r.tglInv||'';
+  document.getElementById('s-fp').value=r.fp||'';
   document.getElementById('s-pic-handled').value=r.picHandled||'';
   document.getElementById('s-customer').value=r.customer||'';
   document.getElementById('s-pic').value=r.pic||'';
@@ -2118,7 +2120,7 @@ async function saveSpare(){
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
   const aggHarga=cleanItems.length?cleanItems[0].harga:0;
-  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,admin:Number(document.getElementById('s-admin').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,fp:document.getElementById('s-fp').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,admin:Number(document.getElementById('s-admin').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
@@ -2383,7 +2385,7 @@ function downloadImportTemplate(){
     ['SHEET SPAREPART'],
     ['• Baris dengan No. berisi angka = transaksi baru + barang pertamanya. Baris di bawahnya dengan No. kosong = barang berikutnya dari transaksi yang sama.'],
     ['• Detail Payment, Tanggal Pay, REK, dan Ket Tf di baris pertama = pembayaran transaksi itu. Kalau ada pembayaran kedua, isi di baris berikutnya pada kolom yang sama.'],
-    ['• Kolom FP disimpan ke Keterangan transaksi (contoh: "FP: DONE").'],
+    ['• Kolom FP masuk ke kolom FP transaksi Sparepart (isian bebas, contoh: DONE).'],
     ['• Sheet ini tidak punya kolom Sales, jadi transaksinya masuk ke "Sales Default" yang dipilih saat import (atau isi kolom tambahan Sales).'],
     [''],
     ['UMUM'],
@@ -2535,7 +2537,8 @@ function buildArTransaction_(b,col,payCols,isMesin,sheetName){
     return d;
   };
   const fp=cleanTxt_(g(R0,'fp'));
-  const ket=[cleanTxt_(g(R0,'ket')), fp?'FP: '+fp:''].filter(Boolean).join(' — ');
+  // Sparepart punya kolom FP sendiri; Mesin tetap menyimpan FP di Keterangan
+  const ket=[cleanTxt_(g(R0,'ket')), (isMesin&&fp)?'FP: '+fp:''].filter(Boolean).join(' — ');
   const cleanItems=items.map(it=>({barang:it.barang,qty:it.qty,harga:it.harga,seri:it.seri}));
   const common={
     id:uid(), salesId:sales?sales.id:'', tglPO:excelDateToStr_(g(R0,'tglPO')), noPO:cleanTxt_(g(R0,'noPO')), noInv, tglInv:dt('tglInv'),
@@ -2551,7 +2554,7 @@ function buildArTransaction_(b,col,payCols,isMesin,sheetName){
   } else {
     type='spare';
     const jenis=items.every(it=>/^jasa$/i.test(it.jenis))?'Jasa':'Sparepart';
-    rec={...common, picHandled:cleanTxt_(g(R0,'picHandled')), jenis, harga:cleanItems[0].harga, jadwalPay:dt('jadwalPay'), tglPasang:dt('tglPasang')};
+    rec={...common, fp, picHandled:cleanTxt_(g(R0,'picHandled')), jenis, harga:cleanItems[0].harga, jadwalPay:dt('jadwalPay'), tglPasang:dt('tglPasang')};
   }
   importParsedRows.push({type, rec, kode, salesNama:sales?sales.nama:'', needDefaultSales:!sales});
 }
