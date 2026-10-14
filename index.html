@@ -207,6 +207,29 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .fp-badge.fp-ok{background:#e8f8ef;color:var(--lunas);}
 .pay-list th.fp-th,.pay-list td.fp-td{text-align:center;width:34px;}
 .fp-check{width:16px;height:16px;cursor:pointer;accent-color:var(--lunas);}
+#m-pay-list,#s-pay-list{overflow-x:auto;}
+.pay-edit:not(.with-tax) .tax-col{display:none;}
+.pay-edit td.tax-val{white-space:nowrap;color:#5a6b80;font-weight:600;text-align:right;background:#f7f9fc;font-size:10.5px;}
+.pay-edit td,.pay-edit th{padding-left:6px;padding-right:6px;}
+.pay-edit th.tax-col{text-align:right;background:#eef3fa;}
+input.num-fmt{font-variant-numeric:tabular-nums;}
+.inv-suggest{position:fixed;z-index:2500;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 12px 34px rgba(0,0,0,.18);width:330px;max-height:320px;display:none;flex-direction:column;font-size:12px;overflow:hidden;}
+.inv-suggest.open{display:flex;}
+.inv-suggest .is-head{padding:8px 11px;background:#f5f7fa;border-bottom:1px solid var(--border);font-size:10.5px;color:var(--text-light);font-weight:700;text-transform:uppercase;letter-spacing:.3px;}
+.inv-suggest .is-list{overflow-y:auto;flex:1;}
+.inv-suggest .is-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 11px;border-bottom:1px solid #f0f2f5;}
+.inv-suggest .is-item.free{cursor:pointer;}
+.inv-suggest .is-item.free:hover{background:#eaf3fd;}
+.inv-suggest .is-item.used{color:#9aa5b1;cursor:not-allowed;}
+.inv-suggest .is-no{font-weight:800;color:var(--primary);font-size:13px;}
+.inv-suggest .is-item.used .is-no{color:#9aa5b1;text-decoration:line-through;}
+.inv-suggest .is-sub{display:block;font-size:10.5px;color:var(--text-light);font-weight:400;}
+.inv-suggest .is-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;white-space:nowrap;}
+.inv-suggest .is-tag.free{background:#e8f8ef;color:var(--lunas);}
+.inv-suggest .is-tag.used{background:#f0f2f5;color:#8a96a3;}
+.inv-suggest .is-empty{padding:12px 11px;color:var(--text-light);}
+.inv-suggest .is-foot{padding:8px;border-top:1px solid var(--border);background:#fafbfc;}
+.inv-suggest .is-foot button{width:100%;font-size:11.5px;}
 
 /* MODAL */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:1000;justify-content:center;align-items:center;}
@@ -567,14 +590,14 @@ tbody td{padding:8px 11px;vertical-align:top;}
   </div>
 </div>
 <!-- MODAL: BOOKING NOMOR INVOICE -->
-<div class="modal-overlay" id="modal-booking">
+<div class="modal-overlay" id="modal-booking" style="z-index:2000">
   <div class="modal" style="max-width:1100px">
     <div class="modal-header"><h3>🧾 Booking Nomor Invoice</h3><button class="modal-close" onclick="closeModal('modal-booking')">×</button></div>
     <div class="modal-body">
       <div class="bk-form">
         <div class="bk-form-title" id="bk-form-title">Ambil Nomor Baru</div>
         <div class="form-grid bk-grid">
-          <div class="form-group"><label>No</label><input type="number" id="bk-no" min="1" step="1" class="bk-no-input"><small class="field-hint" id="bk-no-hint">Otomatis nomor berikutnya</small></div>
+          <div class="form-group"><label>No</label><input type="number" id="bk-no" min="1" step="1" class="bk-no-input" data-nofmt><small class="field-hint" id="bk-no-hint">Otomatis nomor berikutnya</small></div>
           <div class="form-group"><label>Nama Cust</label><input type="text" id="bk-cust" list="bk-cust-list" placeholder="Pilih atau ketik customer baru" autocomplete="off" oninput="bkFillFromCust_()"><datalist id="bk-cust-list"></datalist></div>
           <div class="form-group"><label>PIC</label><input type="text" id="bk-pic" placeholder="Nama PIC"></div>
           <div class="form-group"><label>No Telp</label><input type="text" id="bk-telp" placeholder="08xx"></div>
@@ -630,8 +653,9 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>No Invoice</label><input type="text" id="m-no-inv" placeholder="Contoh: 001/DPM/2026"></div>
         <div class="form-group"><label>Tanggal Invoice</label><input type="date" id="m-tgl-inv"></div>
         <div class="form-group"><label>Sales</label><input type="text" id="m-sales" placeholder="Nama Sales"></div>
-        <div class="form-group"><label>Customer</label><input type="text" id="m-customer" placeholder="Nama Customer"></div>
+        <div class="form-group"><label>Customer</label><input type="text" id="m-customer" placeholder="Nama Customer" onchange="npwpFromCustomer_('mesin')"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="m-pic" placeholder="Nama PIC"></div>
+        <div class="form-group"><label>NPWP</label><input type="text" id="m-npwp" placeholder="Kosongkan kalau customer tidak ber-NPWP" oninput="togglePayTax_('mesin')"><small class="field-hint">Kalau diisi, History Pembayaran menampilkan DPP &amp; PPN tiap pembayaran.</small></div>
         <div class="form-group full"><label>Alamat Customer</label><textarea id="m-alamat" placeholder="Alamat lengkap customer"></textarea></div>
       </div>
       <div class="section-divider">Daftar Barang <span style="color:var(--belum);font-weight:700">* minimal 1 barang</span> <span style="color:var(--text-light);font-weight:400">(foto No. Seri opsional)</span></div>
@@ -689,8 +713,9 @@ tbody td{padding:8px 11px;vertical-align:top;}
         <div class="form-group"><label>Tanggal Invoice</label><input type="date" id="s-tgl-inv"></div>
         <div class="form-group"><label>FP</label><input type="text" id="s-fp" placeholder="Contoh: DONE"></div>
         <div class="form-group"><label>PIC Handled</label><input type="text" id="s-pic-handled" placeholder="Nama PIC"></div>
-        <div class="form-group"><label>Customer</label><input type="text" id="s-customer" placeholder="Nama Customer"></div>
+        <div class="form-group"><label>Customer</label><input type="text" id="s-customer" placeholder="Nama Customer" onchange="npwpFromCustomer_('spare')"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="s-pic" placeholder="Nama PIC"></div>
+        <div class="form-group"><label>NPWP</label><input type="text" id="s-npwp" placeholder="Kosongkan kalau customer tidak ber-NPWP" oninput="togglePayTax_('spare')"><small class="field-hint">Kalau diisi, History Pembayaran menampilkan DPP &amp; PPN tiap pembayaran.</small></div>
         <div class="form-group full"><label>Alamat Customer</label><textarea id="s-alamat" placeholder="Alamat lengkap customer"></textarea></div>
         <div class="form-group"><label>Jenis</label><select id="s-jenis"><option value="Sparepart">Sparepart</option><option value="Jasa">Jasa</option></select></div>
       </div>
@@ -1818,7 +1843,7 @@ async function showPayDetail(id,type){
   const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
   if(!r) return;
   let h=`<p class="text-sm" style="margin-bottom:12px">Barang: <b>${r.barang}</b></p>
-    <table class="pay-list"><thead><tr><th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Keterangan</th><th>Bukti</th></tr></thead><tbody>`;
+    <table class="pay-list"><thead><tr><th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Note</th><th>Bukti</th></tr></thead><tbody>`;
   if(r.payments&&r.payments.length){
     for(const [i,p] of r.payments.entries()){
       const imgKey=`${type}_${id}_pay_${i}`;
@@ -1843,23 +1868,129 @@ async function showPayDetail(id,type){
 // ═══════════════════════════════════════════════════════
 // PAY ROWS IN FORM (with image upload)
 // ═══════════════════════════════════════════════════════
+// ── NPWP: DPP & PPN per pembayaran ──
+// DPP = Jumlah / 1,11 ; PPN = DPP x 11%
+function taxSplit_(j){ j=Number(j)||0; const dpp=Math.round(j/1.11); return {dpp, ppn:Math.round(dpp*0.11)}; }
+function taxCell_(j,k){ return (Number(j)||0) ? idFmtNum_(taxSplit_(j)[k]) : '-'; }
+function hasNpwp_(prefix){ const el=document.getElementById((prefix==='mesin'?'m':'s')+'-npwp'); return !!(el&&el.value.trim()); }
+function togglePayTax_(prefix){
+  const t=document.querySelector('#'+(prefix==='mesin'?'m':'s')+'-pay-list .pay-edit');
+  if(t) t.classList.toggle('with-tax',hasNpwp_(prefix));
+}
+function updatePayTax_(i){
+  const p=payRows[i]; if(!p) return;
+  const a=document.getElementById('paytax-dpp-'+i), b=document.getElementById('paytax-ppn-'+i);
+  if(a) a.textContent=taxCell_(p.jumlah,'dpp'); if(b) b.textContent=taxCell_(p.jumlah,'ppn');
+}
+// Customer lama dipilih: NPWP terisi otomatis dari transaksi sebelumnya (kalau masih kosong)
+function npwpFromCustomer_(prefix){
+  const px=prefix==='mesin'?'m':'s';
+  const el=document.getElementById(px+'-npwp'); if(!el||el.value.trim()) return;
+  const c=document.getElementById(px+'-customer').value.trim().toLowerCase(); if(!c) return;
+  const hit=[...db.mesin,...db.spare].filter(r=>r.npwp&&String(r.customer||'').trim().toLowerCase()===c).sort((a,b)=>String(b.tglPO||'').localeCompare(String(a.tglPO||'')))[0];
+  if(hit){ el.value=hit.npwp; togglePayTax_(prefix); }
+}
+
+// ── NO INVOICE: saran dari Booking Nomor Invoice ──
+let invSuggestCtx_=null;
+function invNoOf_(v){ const m=String(v||'').match(/\d+/); return m?parseInt(m[0],10):null; }
+// Nomor booking yang sudah dipakai (di transaksi mana pun) -> keterangan pemakainya
+function usedInvNos_(prefix){
+  const used=new Map();
+  const mark=(v,desc)=>{ const n=invNoOf_(v); if(n!==null && !used.has(n)) used.set(n,desc); };
+  [['mesin',db.mesin],['spare',db.spare]].forEach(([type,arr])=>(arr||[]).forEach(r=>{
+    if(type===prefix && r.id===editingId) return;   // transaksi yang sedang diedit: pakai isian form
+    mark(r.noInv,`Induk · ${r.customer||'-'}`);
+    const dp=payHasDP_(r.payments||[]);
+    (r.payments||[]).forEach((p,i)=>mark(p.noInv,`${payLabel_(i,dp)} · ${r.customer||'-'}`));
+  }));
+  const px=prefix==='mesin'?'m':'s';
+  mark((document.getElementById(px+'-no-inv')||{}).value,'Induk transaksi ini');
+  const dp=payHasDP_(payRows);
+  payRows.forEach((p,i)=>mark(p.noInv,`${payLabel_(i,dp)} transaksi ini`));
+  return used;
+}
+function invSuggestEl_(){
+  let el=document.getElementById('inv-suggest');
+  if(!el){
+    el=document.createElement('div'); el.id='inv-suggest'; el.className='inv-suggest';
+    el.addEventListener('mousedown',e=>e.preventDefault());   // jangan hilangkan fokus input
+    document.body.appendChild(el);
+    document.addEventListener('mousedown',e=>{ if(invSuggestCtx_ && !el.contains(e.target) && e.target!==invSuggestCtx_.input) hideInvSuggest_(); });
+    document.addEventListener('scroll',e=>{ if(invSuggestCtx_ && !el.contains(e.target)) placeInvSuggest_(); },true);
+    window.addEventListener('resize',()=>{ if(invSuggestCtx_) placeInvSuggest_(); });
+    document.addEventListener('keydown',e=>{ if(e.key==='Escape') hideInvSuggest_(); });
+  }
+  return el;
+}
+function hideInvSuggest_(){ const el=document.getElementById('inv-suggest'); if(el) el.classList.remove('open'); invSuggestCtx_=null; }
+function showInvSuggest_(input,i,prefix){
+  const el=invSuggestEl_();
+  invSuggestCtx_={input,i,prefix};
+  const px=prefix==='mesin'?'m':'s';
+  const cust=document.getElementById(px+'-customer').value.trim();
+  const used=usedInvNos_(prefix);
+  // Nomor yang sedang terisi di baris ini tidak dihitung "terpakai" oleh baris ini sendiri
+  const own=invNoOf_(payRows[i]&&payRows[i].noInv);
+  const list=cust?invBook_().filter(b=>String(b.customer||'').trim().toLowerCase()===cust.toLowerCase()).sort((a,b)=>(Number(a.no)||0)-(Number(b.no)||0)):[];
+  let h=`<div class="is-head">No Invoice dibooking${cust?' · '+escAttr_(cust):''}</div><div class="is-list">`;
+  if(!cust) h+=`<div class="is-empty">Isi nama Customer dulu supaya nomor yang sudah dibooking untuk customer itu muncul di sini.</div>`;
+  else if(!list.length) h+=`<div class="is-empty">Belum ada nomor yang dibooking untuk customer ini.</div>`;
+  list.forEach(b=>{
+    const n=Number(b.no); const isOwn=n===own; const u=!isOwn && used.get(n);
+    const sub=[fmtDate(b.tglInv), b.jenis, b.ket].filter(x=>x&&x!=='-').map(escAttr_).join(' · ');
+    h+=u?`<div class="is-item used" title="Sudah dipakai: ${escAttr_(u)}"><span><span class="is-no">${n}</span><span class="is-sub">${sub}</span></span><span class="is-tag used">Terpakai · ${escAttr_(u)}</span></div>`
+        :`<div class="is-item free" onclick="pickInvNo_(${n})"><span><span class="is-no">${n}</span><span class="is-sub">${sub}</span></span><span class="is-tag free">${isOwn?'Dipakai baris ini':'Belum terpakai'}</span></div>`;
+  });
+  h+=`</div><div class="is-foot"><button class="btn btn-primary" onclick="takeNewInvNo_()">+ Ambil Nomor Baru</button></div>`;
+  el.innerHTML=h;
+  el.classList.add('open');
+  placeInvSuggest_();
+}
+// Posisikan kotak saran tepat di bawah (atau di atas) kolom No Invoice; ikut bergeser saat di-scroll
+function placeInvSuggest_(){
+  const el=document.getElementById('inv-suggest'), c=invSuggestCtx_; if(!el||!c) return;
+  const r=c.input.getBoundingClientRect();
+  if(!c.input.isConnected || r.bottom<0 || r.top>window.innerHeight){ hideInvSuggest_(); return; }
+  const top=(r.bottom+6+el.offsetHeight>window.innerHeight)?Math.max(8,r.top-6-el.offsetHeight):r.bottom+4;
+  el.style.top=top+'px'; el.style.left=Math.max(8,Math.min(r.left,window.innerWidth-el.offsetWidth-8))+'px';
+}
+function pickInvNo_(n){
+  const c=invSuggestCtx_; if(!c) return;
+  payRows[c.i].noInv=String(n); c.input.value=String(n);
+  hideInvSuggest_();
+}
+function takeNewInvNo_(){
+  const c=invSuggestCtx_; if(!c) return;
+  hideInvSuggest_();
+  const px=c.prefix==='mesin'?'m':'s';
+  const p=payRows[c.i]||{};
+  let jenis='Mesin';
+  if(c.prefix!=='mesin'){ const j=document.getElementById('s-jenis').value; jenis=BK_JENIS.find(x=>x.toLowerCase()===String(j).toLowerCase())||'Sparepart'; }
+  openBooking({prefix:c.prefix, i:c.i,
+    customer:document.getElementById(px+'-customer').value.trim(),
+    pic:document.getElementById(px+'-pic').value.trim(),
+    jenis, tgl:p.tgl||'', label:payLabel_(c.i,payHasDP_(payRows))});
+}
+
 function renderPayRows(prefix){
   currentPayPrefix=prefix;
   const id=prefix==='mesin'?'m-pay-list':'s-pay-list';
   const el=document.getElementById(id); if(!el) return;
-  let h=`<table class="pay-list"><thead><tr>
-    <th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah (Rp)</th><th>Rekening</th><th>Keterangan</th><th>Bukti</th><th></th>
+  let h=`<table class="pay-list pay-edit ${hasNpwp_(prefix)?'with-tax':''}"><thead><tr>
+    <th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah (Rp)</th><th class="tax-col">DPP</th><th class="tax-col">PPN 11%</th><th>Rekening</th><th>Note</th><th>Bukti</th><th></th>
   </tr></thead><tbody>`;
   payRows.forEach((p,i)=>{
     const hasImg=p._imgPreview||p._hasImg;
     h+=`<tr id="payrow-${i}">
       <td class="pay-label">${payLabel_(i,payHasDP_(payRows))}</td>
-      <td><input type="text" value="${escAttr_(p.noInv)}" placeholder="No Invoice" onchange="payRows[${i}].noInv=this.value.trim()" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:120px"></td>
+      <td><input type="text" value="${escAttr_(p.noInv)}" placeholder="No Invoice" autocomplete="off" onfocus="showInvSuggest_(this,${i},'${prefix}')" onclick="showInvSuggest_(this,${i},'${prefix}')" oninput="payRows[${i}].noInv=this.value.trim()" onchange="payRows[${i}].noInv=this.value.trim()" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:78px"></td>
       <td class="fp-td"><input type="checkbox" class="fp-check" ${p.fp?'checked':''} onchange="payRows[${i}].fp=this.checked" title="Centang kalau Faktur Pajak pembayaran ini sudah dibuat"></td>
-      <td><input type="date" value="${p.tgl||''}" onchange="payRows[${i}].tgl=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:120px"></td>
-      <td><input type="number" value="${p.jumlah||''}" onchange="payRows[${i}].jumlah=Number(this.value)" oninput="payRows[${i}].jumlah=Number(this.value);calcArAuto_(currentPayPrefix)" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
-      <td><input type="text" value="${p.rek||''}" onchange="payRows[${i}].rek=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:100px"></td>
-      <td><input type="text" value="${p.ket||''}" onchange="payRows[${i}].ket=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
+      <td><input type="date" value="${p.tgl||''}" onchange="payRows[${i}].tgl=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:96px"></td>
+      <td><input type="number" value="${p.jumlah||''}" onchange="payRows[${i}].jumlah=Number(this.value)" oninput="payRows[${i}].jumlah=Number(this.value);calcArAuto_(currentPayPrefix);updatePayTax_(${i})" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:100px"></td>
+      <td class="tax-col tax-val" id="paytax-dpp-${i}">${taxCell_(p.jumlah,'dpp')}</td><td class="tax-col tax-val" id="paytax-ppn-${i}">${taxCell_(p.jumlah,'ppn')}</td>
+      <td><input type="text" value="${p.rek||''}" onchange="payRows[${i}].rek=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:72px"></td>
+      <td><input type="text" value="${escAttr_(p.ket||'')}" placeholder="Note" onchange="payRows[${i}].ket=this.value" oninput="payRows[${i}].ket=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:96px"></td>
       <td>
         <label class="upload-bukti-btn ${hasImg?'has-file':''}" for="bukti-file-${i}" title="${hasImg?'Gambar tersimpan — klik untuk ganti':'Upload bukti pembayaran'}">
           ${UPLOAD_ICON_}
@@ -2058,7 +2189,7 @@ function calcMesinTotal(){
 function openAddMesin(){
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-mesin-title').textContent='Tambah Penjualan Mesin';
-  ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
+  ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-npwp','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
   ['m-dpp','m-ppn','m-discount','m-total','m-ar','m-pph','m-admin'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-status').value='BELUM';
   document.getElementById('m-pph').value=0;
@@ -2093,6 +2224,7 @@ async function editMesin(id){
   document.getElementById('m-sales').value=r.sales||'';
   document.getElementById('m-customer').value=r.customer||'';
   document.getElementById('m-pic').value=r.pic||'';
+  document.getElementById('m-npwp').value=r.npwp||'';
   document.getElementById('m-alamat').value=r.alamat||'';
   document.getElementById('m-ppn').value=r.ppn||'';
   document.getElementById('m-discount').value=r.discount||'';
@@ -2117,7 +2249,7 @@ async function saveMesin(){
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
-  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,admin:Number(document.getElementById('m-admin').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,npwp:document.getElementById('m-npwp').value.trim(),alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:Number(document.getElementById('m-dpp').value)||0,ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,admin:Number(document.getElementById('m-admin').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
@@ -2159,7 +2291,7 @@ function calcSpareTotal(){
 function openAddSpare(){
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-spare-title').textContent='Tambah Penjualan Spareparts';
-  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-fp','s-pic-handled','s-customer','s-pic','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
+  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-fp','s-pic-handled','s-customer','s-pic','s-npwp','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
   ['s-dpp','s-ppn','s-discount','s-total','s-ar','s-pph','s-admin'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s-status').value='BELUM';
   document.getElementById('s-pph').value=0;
@@ -2191,6 +2323,7 @@ async function editSpare(id){
   document.getElementById('s-pic-handled').value=r.picHandled||'';
   document.getElementById('s-customer').value=r.customer||'';
   document.getElementById('s-pic').value=r.pic||'';
+  document.getElementById('s-npwp').value=r.npwp||'';
   document.getElementById('s-alamat').value=r.alamat||'';
   document.getElementById('s-jenis').value=r.jenis||'Sparepart';
   document.getElementById('s-ppn').value=r.ppn||'';
@@ -2217,7 +2350,7 @@ async function saveSpare(){
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
   const aggHarga=cleanItems.length?cleanItems[0].harga:0;
-  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,fp:document.getElementById('s-fp').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,admin:Number(document.getElementById('s-admin').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,fp:document.getElementById('s-fp').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,npwp:document.getElementById('s-npwp').value.trim(),alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:Number(document.getElementById('s-dpp').value)||0,ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,admin:Number(document.getElementById('s-admin').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
@@ -2370,7 +2503,7 @@ function mapStatus_(v){
 // No otomatis = nomor terbesar + 1 (bisa diubah manual, tidak boleh dobel).
 // ═══════════════════════════════════════════════════════
 const BK_JENIS=['Acrylic','Jasa','Jasa Service','Mesin','Ongkir','Sparepart'];   // urut A-Z
-let bkEditingId=null, bkLastSavedId=null;
+let bkEditingId=null, bkLastSavedId=null, bkPickTarget=null;
 function invBook_(){ if(!Array.isArray(db.invBook)) db.invBook=[]; return db.invBook; }
 function bkNextNo_(){ return invBook_().reduce((m,b)=>Math.max(m,Number(b.no)||0),0)+1; }
 function bkToday_(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
@@ -2400,9 +2533,21 @@ function bkFillOptions_(cur){
   if(cur&&!cur.salesId&&cur.salesNama) so+=`<option value="__name__">${escAttr_(cur.salesNama)} (belum terdaftar)</option>`;
   document.getElementById('bk-sales').innerHTML=so;
 }
-function openBooking(){
+// pick = {prefix,i,customer,pic,jenis,tgl,label}: dibuka dari History Pembayaran ("Ambil Nomor Baru").
+// Setelah disimpan, jendela tertutup dan nomornya langsung terisi ke baris pembayaran itu.
+function openBooking(pick){
   bkLastSavedId=null;
+  bkPickTarget=(pick&&pick.prefix)?pick:null;
   bkResetForm_();
+  if(bkPickTarget){
+    document.getElementById('bk-cust').value=pick.customer||'';
+    document.getElementById('bk-pic').value=pick.pic||'';
+    bkFillFromCust_();
+    if(pick.jenis) document.getElementById('bk-jenis').value=pick.jenis;
+    if(pick.tgl) document.getElementById('bk-tgl').value=pick.tgl;
+    document.getElementById('bk-form-title').textContent=`Ambil Nomor Baru → langsung diisi ke ${pick.label||'pembayaran'}`;
+    document.getElementById('bk-save-btn').innerHTML='💾 Simpan &amp; Pakai Nomor Ini';
+  }
   document.getElementById('bk-search').value='';
   renderBookingList();
   openModal('modal-booking');
@@ -2477,6 +2622,12 @@ async function saveBooking(){
   bkLastSavedId=rec.id;
   await saveData();
   toast(bkEditingId?`Booking No ${no} diperbarui`:`Nomor ${no} dibooking untuk ${customer}`);
+  if(bkPickTarget && !bkEditingId){
+    const t=bkPickTarget; bkPickTarget=null;
+    if(payRows[t.i]){ payRows[t.i].noInv=String(no); renderPayRows(t.prefix); }
+    closeModal('modal-booking');
+    return;
+  }
   bkResetForm_();
   document.getElementById('bk-search').value='';
   renderBookingList();
@@ -3591,10 +3742,18 @@ function buildInvoiceDoc_(id, type, payIdx){
     });
     // Note: harga (Total) sudah / belum termasuk PPN
     // (invoice per pembayaran: bagian Note dikosongkan)
-    rowsXml+=invFill_(perPay?T.MID.split('>Note :<').join('><'):T.MID,{
-      NOTE1: perPay ? '' : `Harga ${type==='mesin'?'mesin ':''}Rp. ${invNum_(total)},00`,
-      NOTE2: perPay ? '' : (ppn>0 ? 'sudah termasuk PPN' : 'belum termasuk PPN')
+    // Invoice per pembayaran: "Note :" + isi Note pembayaran itu (kosong = "Note :" saja)
+    const selNote=perPay?String(sel.ket||'').trim():'';
+    let n1=selNote, n2='';
+    if(selNote.length>55){ const cut=selNote.lastIndexOf(' ',55); const k=cut>20?cut:55; n1=selNote.slice(0,k).trim(); n2=selNote.slice(k).trim(); }
+    rowsXml+=invFill_(T.MID,{
+      NOTE1: perPay ? invText_(n1) : `Harga ${type==='mesin'?'mesin ':''}Rp. ${invNum_(total)},00`,
+      NOTE2: perPay ? invText_(n2) : (ppn>0 ? 'sudah termasuk PPN' : 'belum termasuk PPN')
     });
+    // Customer ber-NPWP: angka pembayaran = DPP (Jumlah/1,11) dan PPN = DPP x 11% dari pembayaran yang dipilih.
+    // Tanpa NPWP: angka pembayaran penuh, PPN tidak dipisah.
+    const npwp=String(r.npwp||'').trim();
+    const payAmt=p=>(perPay&&npwp)?taxSplit_(p.jumlah).dpp:(Number(p.jumlah)||0);
     // Rincian: Discount, Total Harga, DP / PAY ..., PPN
     const sums=[];
     sums.push({label:'Discount',txt:discount>0?invNum_(discount):'-',bold:false});
@@ -3605,9 +3764,10 @@ function buildInvoiceDoc_(id, type, payIdx){
     pays.forEach((p,i)=>{
       if(i>lastIdx) return;
       const label=(hasDP&&i===0)?'DP':(perPay?'Pembayaran ':'PAY ')+invRoman_(hasDP?i:i+1);
-      sums.push({label,txt:invNum_(p.jumlah),bold:i===lastIdx});
+      sums.push({label,txt:invNum_(payAmt(p)),bold:i===lastIdx});
     });
-    sums.push({label:'PPN',txt:ppn>0?invNum_(ppn):'-',bold:true});
+    const ppnTxt=perPay?(npwp&&Number(sel.jumlah)?invNum_(taxSplit_(sel.jumlah).ppn):'-'):(ppn>0?invNum_(ppn):'-');
+    sums.push({label:'PPN',txt:ppnTxt,bold:true});
     const totalTxt=invNum_(perPay?sel.jumlah:total);
     const unit=t=>{ let w=0; for(const ch of t) w+=(ch>='0'&&ch<='9')?2:1; return w; };
     const maxW=Math.max(unit(totalTxt),...sums.map(s=>unit(s.txt)));
@@ -3622,7 +3782,7 @@ function buildInvoiceDoc_(id, type, payIdx){
       CUSTOMER:invText_(r.customer||'-'),
       ALAMAT:invText_(r.alamat||'-'),
       PIC:invText_(r.pic||'-'),
-      NPWP:'-',
+      NPWP:invText_(npwp||'-'),
       NOINV:invText_((perPay?sel.noInv:r.noInv)||'-'),
       TGL:fmtTglInvoice_(perPay?(sel.tgl||r.tglInv||r.tglPO):(r.tglInv||r.tglPO)),
       BANK:invText_(pt.bankNama||'Bank BCA'),
@@ -3714,6 +3874,62 @@ async function startApp(){
   if(nSync){ await saveData(); renderSidebar(); renderLanding(); toast(`${nSync} transaksi disesuaikan: A/R & status mengikuti History Pembayaran`); }
   showPaymentReminder();                   // pengingat customer terlambat bayar, tiap selesai login
 }
+
+// ═══════════════════════════════════════════════════════
+// PEMISAH RIBUAN: semua kolom angka (input number) tampil 30.000.000.
+// Nilai yang dibaca kode tetap angka polos (getter value dibuat ulang),
+// jadi perhitungan lama tidak perlu diubah. Desimal pakai koma (27.027.027,03).
+// Kolom dengan atribut data-nofmt (mis. No booking invoice) tidak diformat.
+// ═══════════════════════════════════════════════════════
+const NATIVE_VAL_=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value');
+function idFmtNum_(n){
+  n=Number(n); if(!isFinite(n)) return '';
+  const neg=n<0; const r=Math.round(Math.abs(n)*100)/100;
+  const [a,b]=r.toFixed(2).split('.');
+  return (neg?'-':'')+a.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(b&&b!=='00'?','+b.replace(/0$/,''):'');
+}
+function idParseNum_(s){
+  s=String(s==null?'':s).trim(); if(!s) return '';
+  const neg=s.charAt(0)==='-';
+  s=s.replace(/[^\d,]/g,'');
+  const k=s.indexOf(',');
+  let t=k<0?s:s.slice(0,k)+'.'+s.slice(k+1).replace(/,/g,'');
+  if(t===''||t==='.') return '';
+  if(t.charAt(0)==='.') t='0'+t;
+  return (neg?'-':'')+t;
+}
+function idTyped_(s){   // format saat diketik: titik ribuan, koma desimal maks 2 angka
+  const neg=String(s).trim().charAt(0)==='-';
+  const c=String(s).replace(/[^\d,]/g,'');
+  const k=c.indexOf(',');
+  let a=(k<0?c:c.slice(0,k)).replace(/^0+(?=\d)/,'');
+  const b=k<0?null:c.slice(k+1).replace(/,/g,'').slice(0,2);
+  if(a===''&&b!==null) a='0';
+  return (neg?'-':'')+a.replace(/\B(?=(\d{3})+(?!\d))/g,'.')+(b!==null?','+b:'');
+}
+function enhanceNumInput_(el){
+  if(el._numFmt || el.hasAttribute('data-nofmt')) return;
+  el._numFmt=true;
+  const raw=NATIVE_VAL_.get.call(el);
+  el.type='text'; el.setAttribute('inputmode','decimal'); el.classList.add('num-fmt');
+  Object.defineProperty(el,'value',{configurable:true,
+    get(){ return idParseNum_(NATIVE_VAL_.get.call(this)); },
+    set(v){ NATIVE_VAL_.set.call(this,(v===''||v==null)?'':(isFinite(Number(v))?idFmtNum_(Number(v)):String(v))); }
+  });
+  el.value=raw;
+  el.addEventListener('input',()=>{
+    const old=NATIVE_VAL_.get.call(el), pos=el.selectionStart==null?old.length:el.selectionStart;
+    const keep=old.slice(0,pos).replace(/[^\d,]/g,'').length;
+    const nv=idTyped_(old); if(nv===old) return;
+    NATIVE_VAL_.set.call(el,nv);
+    let p=0,seen=0; while(p<nv.length && seen<keep){ if(/[\d,]/.test(nv[p])) seen++; p++; }
+    try{ el.setSelectionRange(p,p); }catch(e){}
+  });
+}
+function enhanceNumInputs_(root){ (root||document).querySelectorAll('input[type=number]:not([data-nofmt])').forEach(enhanceNumInput_); }
+enhanceNumInputs_(document);
+new MutationObserver(ms=>{ for(const m of ms) for(const n of m.addedNodes){ if(n.nodeType!==1) continue; if(n.matches&&n.matches('input[type=number]')) enhanceNumInput_(n); else if(n.querySelectorAll) enhanceNumInputs_(n); } })
+  .observe(document.body,{childList:true,subtree:true});
 
 // Tampilkan gerbang login setelah splash 3 detik selesai — startApp() baru
 // dipanggil setelah login berhasil (lihat submitGateLogin), bukan otomatis
