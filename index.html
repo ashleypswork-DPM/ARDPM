@@ -1268,16 +1268,17 @@ function showDashboard(){
           <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct(r.lunas,r.count)}%;background:${pct(r.lunas,r.count)>=80?'#27ae60':pct(r.lunas,r.count)>=50?'#f39c12':'#e74c3c'}"></div></div></td>
         </tr>`).join('')}</tbody></table></div>
       <div class="dash-card full"><h3>🔴 Customer Belum Lunas (Top 10)</h3><table class="ar-table">
-        <thead><tr><th>Customer</th><th>Barang</th><th>Sales</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th><th>Tgl PO</th></tr></thead>
-        <tbody>${belumRecords.length===0?`<tr><td colspan="8" style="text-align:center;padding:24px;color:#999">Semua sudah lunas 🎉</td></tr>`:
+        <thead><tr><th>Customer</th><th>Barang</th><th>Sales</th><th>Tgl PO</th><th>Tgl Kirim</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th></tr></thead>
+        <tbody>${belumRecords.length===0?`<tr><td colspan="9" style="text-align:center;padding:24px;color:#999">Semua sudah lunas 🎉</td></tr>`:
           belumRecords.map(r=>{const s=db.sales.find(x=>x.id===r.salesId);return`<tr>
             <td><b>${r.customer}</b><br><span class="text-sm">${r.pic||''}</span></td>
             <td style="max-width:180px">${r.barang}</td><td>${s?s.nama:'-'}</td>
+            <td style="white-space:nowrap">${fmtDate(r.tglPO)}</td>
+            <td style="white-space:nowrap">${fmtDate(r.tglKirim)}</td>
             <td class="currency">${fmt(r.total)}</td>
             <td class="currency" style="color:var(--lunas);font-weight:600">${fmt(doneOf_(r))}</td>
             <td class="currency"><b style="color:var(--belum)">${fmt(r.ar)}</b></td>
             <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td>
-            <td>${fmtDate(r.tglPO)}</td>
           </tr>`;}).join('')}
         </tbody></table></div>
     </div>
@@ -1365,11 +1366,12 @@ function renderDashTab(tc){
         <tr><td><b>Sparepart/Jasa</b></td><td>${sRec.length}</td><td class="currency">${fmt(sRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(sRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(sRec.reduce((a,r)=>a+(r.ar||0),0))}</td></tr>
       </tbody></table></div>
     <div class="dash-card full"><h3>🔴 Daftar Belum Lunas</h3><table class="ar-table">
-      <thead><tr><th>Customer</th><th>Barang</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th><th>Tgl PO</th></tr></thead>
-      <tbody>${belum.length===0?`<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Semua sudah lunas 🎉</td></tr>`:
+      <thead><tr><th>Customer</th><th>Barang</th><th>Tgl PO</th><th>Tgl Kirim</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th></tr></thead>
+      <tbody>${belum.length===0?`<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Semua sudah lunas 🎉</td></tr>`:
         belum.map(r=>`<tr><td><b>${r.customer}</b><br><span class="text-sm">${r.pic||''}</span></td><td>${r.barang}</td>
+          <td style="white-space:nowrap">${fmtDate(r.tglPO)}</td><td style="white-space:nowrap">${fmtDate(r.tglKirim)}</td>
           <td class="currency">${fmt(r.total)}</td><td class="currency" style="color:var(--lunas);font-weight:600">${fmt(doneOf_(r))}</td><td class="currency"><b style="color:var(--belum)">${fmt(r.ar)}</b></td>
-          <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td><td>${fmtDate(r.tglPO)}</td></tr>`).join('')}
+          <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td></tr>`).join('')}
       </tbody></table></div>
   </div>`;
 }
