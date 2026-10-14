@@ -931,6 +931,19 @@ function setSyncStatus(text){
 // Ambil data terbaru dari Google Sheets. Return true jika berhasil & ada data.
 // Sekarang lewat POST (bukan GET) supaya kredensial ID/Password tidak ikut
 // ter-tulis di URL (browser history / server access log).
+// Code.gs yang terpasang (deployment /exec) masih versi lama -> Booking Nomor Invoice,
+// NPWP, dll. TIDAK ikut tersimpan ke Sheets. Tampilkan peringatan supaya kelihatan.
+const API_VERSION_NEEDED=3;
+let oldServerWarned_=false;
+function warnOldServer_(result){
+  if(result && Number(result.apiVersion)>=API_VERSION_NEEDED) return false;
+  setSyncStatus('⚠️ Code.gs di Apps Script belum versi terbaru — Booking Invoice & NPWP belum tersimpan ke Sheets');
+  if(!oldServerWarned_){
+    oldServerWarned_=true;
+    toast('Code.gs di Apps Script belum versi terbaru. Deploy > Manage deployments > pensil > New version > Deploy. Sampai itu dilakukan, Booking Invoice & NPWP hanya tersimpan di perangkat ini.','error');
+  }
+  return true;
+}
 async function pullFromSheets(){
   try{
     setSyncStatus('☁️ Sinkron dari Google Sheets...');
@@ -955,6 +968,7 @@ async function pullFromSheets(){
       if(!db.spare) db.spare = [];
       await idbSet('store','main_db', JSON.stringify(db));
       setSyncStatus('☁️ Tersambung — data terbaru dari Google Sheets');
+      warnOldServer_(result);
       return true;
     }
     setSyncStatus('☁️ Tersambung — belum ada data di Sheets, memakai data lokal');
@@ -1063,7 +1077,7 @@ async function pushToSheetsNow(silent){
     if(result.code==='AUTH'){ forceReLogin_(); return false; }
     if(result.status === 'success'){
       setSyncStatus('☁️ Tersimpan di Google Sheets');
-      if(!silent) toast('Sinkron ke Google Sheets berhasil');
+      if(!warnOldServer_(result) && !silent) toast('Sinkron ke Google Sheets berhasil');
       return true;
     } else {
       setSyncStatus('⚠️ Gagal sinkron: ' + (result.message||'unknown'));
