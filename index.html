@@ -100,6 +100,7 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .pie-legend{display:flex;flex-direction:column;gap:7px;}
 .pie-item{display:flex;align-items:center;gap:7px;font-size:11px;}
 .pie-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0;}
+.ar-table td.currency{white-space:nowrap;}
 .ar-table{width:100%;border-collapse:collapse;font-size:11px;}
 .ar-table th{background:#f5f7fa;padding:7px 9px;text-align:left;font-size:10px;font-weight:700;color:var(--text-light);text-transform:uppercase;}
 .ar-table td{padding:7px 9px;border-bottom:1px solid #f0f2f5;}
@@ -1225,6 +1226,8 @@ function selectCity(city){
 // ═══════════════════════════════════════════════════════
 // DASHBOARD
 // ═══════════════════════════════════════════════════════
+// Done Payment = yang sudah dibayar customer (termasuk PPh Jasa & Biaya Admin) = Total − A/R
+function doneOf_(r){ return Math.round(((Number(r.total)||0)-(Number(r.ar)||0))*100)/100; }
 function showDashboard(){
   currentSalesId=null; renderSidebar(); closeSidebarMobile();
   const mc=document.getElementById('main-content');
@@ -1265,12 +1268,13 @@ function showDashboard(){
           <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct(r.lunas,r.count)}%;background:${pct(r.lunas,r.count)>=80?'#27ae60':pct(r.lunas,r.count)>=50?'#f39c12':'#e74c3c'}"></div></div></td>
         </tr>`).join('')}</tbody></table></div>
       <div class="dash-card full"><h3>🔴 Customer Belum Lunas (Top 10)</h3><table class="ar-table">
-        <thead><tr><th>Customer</th><th>Barang</th><th>Sales</th><th>Total</th><th>A/R</th><th>Status</th><th>Tgl PO</th></tr></thead>
-        <tbody>${belumRecords.length===0?`<tr><td colspan="7" style="text-align:center;padding:24px;color:#999">Semua sudah lunas 🎉</td></tr>`:
+        <thead><tr><th>Customer</th><th>Barang</th><th>Sales</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th><th>Tgl PO</th></tr></thead>
+        <tbody>${belumRecords.length===0?`<tr><td colspan="8" style="text-align:center;padding:24px;color:#999">Semua sudah lunas 🎉</td></tr>`:
           belumRecords.map(r=>{const s=db.sales.find(x=>x.id===r.salesId);return`<tr>
             <td><b>${r.customer}</b><br><span class="text-sm">${r.pic||''}</span></td>
             <td style="max-width:180px">${r.barang}</td><td>${s?s.nama:'-'}</td>
             <td class="currency">${fmt(r.total)}</td>
+            <td class="currency" style="color:var(--lunas);font-weight:600">${fmt(doneOf_(r))}</td>
             <td class="currency"><b style="color:var(--belum)">${fmt(r.ar)}</b></td>
             <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td>
             <td>${fmtDate(r.tglPO)}</td>
@@ -1355,16 +1359,16 @@ function renderDashTab(tc){
       <div class="pie-item"><div class="pie-dot" style="background:#e74c3c"></div><span>Belum: <b>${B}</b></span></div>
     </div></div></div>
     <div class="dash-card"><h3>💰 Ringkasan Nilai</h3><table class="ar-table">
-      <thead><tr><th>Kategori</th><th>Transaksi</th><th>Total Nilai</th><th>A/R</th></tr></thead>
+      <thead><tr><th>Kategori</th><th>Transaksi</th><th>Total Nilai</th><th>Done Payment</th><th>A/R</th></tr></thead>
       <tbody>
-        <tr><td><b>Mesin</b></td><td>${mRec.length}</td><td class="currency">${fmt(mRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--belum)">${fmt(mRec.reduce((a,r)=>a+(r.ar||0),0))}</td></tr>
-        <tr><td><b>Sparepart/Jasa</b></td><td>${sRec.length}</td><td class="currency">${fmt(sRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--belum)">${fmt(sRec.reduce((a,r)=>a+(r.ar||0),0))}</td></tr>
+        <tr><td><b>Mesin</b></td><td>${mRec.length}</td><td class="currency">${fmt(mRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(mRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(mRec.reduce((a,r)=>a+(r.ar||0),0))}</td></tr>
+        <tr><td><b>Sparepart/Jasa</b></td><td>${sRec.length}</td><td class="currency">${fmt(sRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(sRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(sRec.reduce((a,r)=>a+(r.ar||0),0))}</td></tr>
       </tbody></table></div>
     <div class="dash-card full"><h3>🔴 Daftar Belum Lunas</h3><table class="ar-table">
-      <thead><tr><th>Customer</th><th>Barang</th><th>Total</th><th>A/R</th><th>Status</th><th>Tgl PO</th></tr></thead>
-      <tbody>${belum.length===0?`<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Semua sudah lunas 🎉</td></tr>`:
+      <thead><tr><th>Customer</th><th>Barang</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th><th>Tgl PO</th></tr></thead>
+      <tbody>${belum.length===0?`<tr><td colspan="7" style="text-align:center;padding:20px;color:#999">Semua sudah lunas 🎉</td></tr>`:
         belum.map(r=>`<tr><td><b>${r.customer}</b><br><span class="text-sm">${r.pic||''}</span></td><td>${r.barang}</td>
-          <td class="currency">${fmt(r.total)}</td><td class="currency"><b style="color:var(--belum)">${fmt(r.ar)}</b></td>
+          <td class="currency">${fmt(r.total)}</td><td class="currency" style="color:var(--lunas);font-weight:600">${fmt(doneOf_(r))}</td><td class="currency"><b style="color:var(--belum)">${fmt(r.ar)}</b></td>
           <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td><td>${fmtDate(r.tglPO)}</td></tr>`).join('')}
       </tbody></table></div>
   </div>`;
@@ -3036,6 +3040,7 @@ function exportXLSX(){
     const allRec=[...db.mesin,...db.spare];
     const totalVal=allRec.reduce((a,r)=>a+num(r.total),0);
     const totalAR=allRec.reduce((a,r)=>a+num(r.ar),0);
+    const totalDone=totalVal-totalAR;
     const L=allRec.filter(r=>r.status==='LUNAS').length;
     const B=allRec.filter(r=>r.status==='BELUM').length;
     const P=allRec.filter(r=>r.status==='PROGRESS').length;
@@ -3044,13 +3049,15 @@ function exportXLSX(){
     ws['A3']={t:'s',v:'',s:{...fillColor(C.accent)}};
     ws['A5']={t:'s',v:'TOTAL NILAI',s:{...boldWhite,...fillColor(C.subheader)}};
     ws['B5']={t:'n',v:totalVal,z:'"Rp "#,##0',s:{font:{bold:true,sz:11,color:{rgb:C.header},name:'Calibri'},alignment:{horizontal:'right'}}};
-    ws['C5']={t:'s',v:'TOTAL A/R',s:{...boldWhite,...fillColor(C.belum)}};
-    ws['D5']={t:'n',v:totalAR,z:'"Rp "#,##0',s:{font:{bold:true,sz:11,color:{rgb:'E74C3C'},name:'Calibri'},alignment:{horizontal:'right'}}};
-    ws['E5']={t:'s',v:'LUNAS',s:{...boldWhite,...fillColor(C.lunas)}};
-    ws['F5']={t:'n',v:L,s:{font:{bold:true,sz:11,color:{rgb:C.lunas},name:'Calibri'},alignment:{horizontal:'center'}}};
-    ws['G5']={t:'s',v:'BELUM+PROGRESS',s:{...boldWhite,...fillColor(C.progress)}};
-    ws['H5']={t:'n',v:B+P,s:{font:{bold:true,sz:11,color:{rgb:C.progress},name:'Calibri'},alignment:{horizontal:'center'}}};
-    const hdr=['No','Sales','Lokasi','Total Trx','Total Nilai','A/R','Lunas','Belum','% Lunas'];
+    ws['C5']={t:'s',v:'DONE PAYMENT',s:{...boldWhite,...fillColor(C.lunas)}};
+    ws['D5']={t:'n',v:totalDone,z:'"Rp "#,##0',s:{font:{bold:true,sz:11,color:{rgb:C.lunas},name:'Calibri'},alignment:{horizontal:'right'}}};
+    ws['E5']={t:'s',v:'TOTAL A/R',s:{...boldWhite,...fillColor(C.belum)}};
+    ws['F5']={t:'n',v:totalAR,z:'"Rp "#,##0',s:{font:{bold:true,sz:11,color:{rgb:'E74C3C'},name:'Calibri'},alignment:{horizontal:'right'}}};
+    ws['G5']={t:'s',v:'LUNAS',s:{...boldWhite,...fillColor(C.lunas)}};
+    ws['H5']={t:'n',v:L,s:{font:{bold:true,sz:11,color:{rgb:C.lunas},name:'Calibri'},alignment:{horizontal:'center'}}};
+    ws['I5']={t:'s',v:'BELUM+PROGRESS',s:{...boldWhite,...fillColor(C.progress)}};
+    ws['J5']={t:'n',v:B+P,s:{font:{bold:true,sz:11,color:{rgb:C.progress},name:'Calibri'},alignment:{horizontal:'center'}}};
+    const hdr=['No','Sales','Lokasi','Total Trx','Total Nilai','Done Payment','A/R','Lunas','Belum','% Lunas'];
     hdr.forEach((h,i)=>{const col=String.fromCharCode(65+i);ws[`${col}8`]={t:'s',v:h,s:{...boldWhite,...fillColor(C.header),...center(),...border()}};});
     const salesRows=db.sales.map(s=>{
       const sm=[...db.mesin.filter(m=>m.salesId===s.id),...db.spare.filter(m=>m.salesId===s.id)];
@@ -3058,13 +3065,13 @@ function exportXLSX(){
     }).filter(r=>r.count>0);
     salesRows.forEach((r,i)=>{
       const row=9+i;const bg=i%2===0?C.white:'F8F9FB';
-      const cols=[i+1,r.sales.nama,r.sales.kota,r.count,r.total,r.ar,r.lunas,r.belum,r.count>0?Math.round(r.lunas/r.count*100)+'%':'0%'];
-      cols.forEach((v,ci)=>{const col=String.fromCharCode(65+ci);const isCurr=ci===4||ci===5;ws[`${col}${row}`]={t:isCurr?'n':'s',v,s:{font:{sz:10,color:{rgb:ci===5&&r.ar>0?C.belum:C.header},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:bg}},alignment:{horizontal:isCurr?'right':ci===0||ci===3||ci===6||ci===7||ci===8?'center':'left',vertical:'center'},...border()}};if(isCurr)ws[`${col}${row}`].z='"Rp "#,##0';});
+      const cols=[i+1,r.sales.nama,r.sales.kota,r.count,r.total,r.total-r.ar,r.ar,r.lunas,r.belum,r.count>0?Math.round(r.lunas/r.count*100)+'%':'0%'];
+      cols.forEach((v,ci)=>{const col=String.fromCharCode(65+ci);const isCurr=ci===4||ci===5||ci===6;ws[`${col}${row}`]={t:isCurr?'n':'s',v,s:{font:{sz:10,color:{rgb:ci===6&&r.ar>0?C.belum:ci===5?C.lunas:C.header},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:bg}},alignment:{horizontal:isCurr?'right':ci===0||ci===3||ci===7||ci===8||ci===9?'center':'left',vertical:'center'},...border()}};if(isCurr)ws[`${col}${row}`].z='"Rp "#,##0';});
     });
     const lr=9+salesRows.length;
-    ws['!ref']=`A1:H${lr+5}`;
-    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:7}},{s:{r:1,c:0},e:{r:1,c:7}},{s:{r:2,c:0},e:{r:2,c:7}}];
-    ws['!cols']=[{wch:5},{wch:18},{wch:16},{wch:10},{wch:18},{wch:18},{wch:8},{wch:8},{wch:10}];
+    ws['!ref']=`A1:J${lr+5}`;
+    ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:9}},{s:{r:1,c:0},e:{r:1,c:9}},{s:{r:2,c:0},e:{r:2,c:9}}];
+    ws['!cols']=[{wch:5},{wch:18},{wch:16},{wch:10},{wch:18},{wch:18},{wch:18},{wch:8},{wch:8},{wch:10}];
     ws['!rows']=[{hpt:34},{hpt:18},{hpt:8}];
     return ws;
   }
