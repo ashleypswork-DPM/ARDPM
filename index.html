@@ -937,7 +937,7 @@ const API_VERSION_NEEDED=3;
 let oldServerWarned_=false;
 function warnOldServer_(result){
   if(result && Number(result.apiVersion)>=API_VERSION_NEEDED) return false;
-  setSyncStatus('⚠️ Code.gs di Apps Script belum versi terbaru — Booking Invoice & NPWP belum tersimpan ke Sheets');
+  setSyncStatus(`⚠️ Code.gs di Apps Script belum versi terbaru — Booking Invoice & NPWP belum tersimpan ke Sheets (link …${WEB_APP_URL.slice(-11,-5)}, versi server: ${result&&result.apiVersion?result.apiVersion:'lama'})`);
   if(!oldServerWarned_){
     oldServerWarned_=true;
     toast('Code.gs di Apps Script belum versi terbaru. Deploy > Manage deployments > pensil > New version > Deploy. Sampai itu dilakukan, Booking Invoice & NPWP hanya tersimpan di perangkat ini.','error');
