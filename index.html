@@ -68,6 +68,23 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 .btn-sidebar.export:hover{background:rgba(39,174,96,.3);}
 .btn-sidebar.loc{background:rgba(232,160,32,.15);border-color:rgba(232,160,32,.3);color:#f0c050;}
 .btn-sidebar.loc:hover{background:rgba(232,160,32,.25);}
+.btn-sidebar.book{background:rgba(52,152,219,.18);border-color:rgba(52,152,219,.35);color:#8cc8f5;}
+.btn-sidebar.book:hover{background:rgba(52,152,219,.28);}
+.bk-form{background:#f7f9fc;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:14px;}
+.bk-form-title{font-size:12px;font-weight:700;color:var(--primary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.4px;}
+.bk-form.editing{background:#fff8e6;border-color:#f3d48a;}
+.form-grid.bk-grid{grid-template-columns:repeat(4,1fr);}
+.bk-no-input{font-weight:800;font-size:15px !important;color:var(--primary);}
+.bk-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px;}
+.bk-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;}
+.bk-toolbar input{padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;min-width:240px;font-family:inherit;}
+.bk-count{font-size:11px;color:var(--text-light);}
+.bk-table-wrap{max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:8px;}
+.bk-table{margin-top:0;}
+.bk-table th{position:sticky;top:0;z-index:1;}
+.bk-table td.bk-no{font-weight:800;color:var(--primary);}
+.bk-table tr.bk-new td{background:#eafaf1;}
+@media (max-width:860px){ .form-grid.bk-grid{grid-template-columns:1fr 1fr;} }
 .btn-sidebar.danger-s{background:rgba(231,76,60,.12);border-color:rgba(231,76,60,.25);color:#ff8a7a;}
 .btn-sidebar.danger-s:hover{background:rgba(231,76,60,.22);}
 
@@ -378,6 +395,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
   <div class="db-info" id="db-info">💾 IndexedDB — Penyimpanan Lokal</div>
   <div class="db-info" id="sync-status">☁️ Menghubungkan ke Google Sheets...</div>
   <div class="sidebar-actions">
+    <button class="btn-sidebar book" onclick="openBooking()">🧾 Booking Nomor Invoice</button>
     <button class="btn-sidebar loc" onclick="requireAuth(openManageLocations)">📍 Kelola Lokasi</button>
     <button class="btn-sidebar" onclick="requireAuth(openManageSales)">👤 Kelola Sales</button>
     <button class="btn-sidebar" onclick="openImportModal()">📥 Import dari Excel</button>
@@ -541,6 +559,44 @@ tbody td{padding:8px 11px;vertical-align:top;}
       <p class="reminder-note">Berisi semua transaksi yang belum lunas. Jatuh tempo = 1 bulan setelah pembayaran terakhir (atau setelah Tanggal Invoice / Tanggal PO kalau belum pernah bayar). Klik "Buka" untuk membuka transaksinya.</p>
     </div>
     <div class="reminder-foot"><button class="btn btn-primary" onclick="closeModal('modal-reminder')">Tutup</button></div>
+  </div>
+</div>
+<!-- MODAL: BOOKING NOMOR INVOICE -->
+<div class="modal-overlay" id="modal-booking">
+  <div class="modal" style="max-width:1100px">
+    <div class="modal-header"><h3>🧾 Booking Nomor Invoice</h3><button class="modal-close" onclick="closeModal('modal-booking')">×</button></div>
+    <div class="modal-body">
+      <div class="bk-form">
+        <div class="bk-form-title" id="bk-form-title">Ambil Nomor Baru</div>
+        <div class="form-grid bk-grid">
+          <div class="form-group"><label>No</label><input type="number" id="bk-no" min="1" step="1" class="bk-no-input"><small class="field-hint" id="bk-no-hint">Otomatis nomor berikutnya</small></div>
+          <div class="form-group"><label>Nama Cust</label><input type="text" id="bk-cust" list="bk-cust-list" placeholder="Pilih atau ketik customer baru" autocomplete="off" oninput="bkFillFromCust_()"><datalist id="bk-cust-list"></datalist></div>
+          <div class="form-group"><label>PIC</label><input type="text" id="bk-pic" placeholder="Nama PIC"></div>
+          <div class="form-group"><label>No Telp</label><input type="text" id="bk-telp" placeholder="08xx"></div>
+          <div class="form-group"><label>Jenis</label><select id="bk-jenis"></select></div>
+          <div class="form-group"><label>Ket</label><input type="text" id="bk-ket" placeholder="Keterangan"></div>
+          <div class="form-group"><label>Tanggal Invoice</label><input type="date" id="bk-tgl"></div>
+          <div class="form-group"><label>Sales</label><select id="bk-sales"></select></div>
+        </div>
+        <div class="bk-actions">
+          <button class="btn btn-outline" id="bk-cancel-edit" style="display:none" onclick="bkResetForm_()">Batal Edit</button>
+          <button class="btn btn-primary" id="bk-save-btn" onclick="saveBooking()">💾 Simpan &amp; Ambil Nomor</button>
+        </div>
+      </div>
+      <div class="bk-toolbar">
+        <input type="text" id="bk-search" placeholder="🔍 Cari no / customer / PIC / sales..." oninput="renderBookingList()">
+        <span class="bk-count" id="bk-count"></span>
+        <span style="flex:1"></span>
+        <button class="btn btn-outline" style="font-size:11px" onclick="downloadBookingTemplate()">📄 Download Format</button>
+        <button class="btn btn-outline" style="font-size:11px" onclick="document.getElementById('bk-import-file').click()">📥 Import Invoice</button>
+        <input type="file" id="bk-import-file" accept=".xlsx,.xls" style="display:none" onchange="importBookingFile(this)">
+      </div>
+      <div class="bk-table-wrap"><table class="pay-list bk-table">
+        <thead><tr><th>No</th><th>Nama Cust</th><th>PIC</th><th>No Telp</th><th>Jenis</th><th>Ket</th><th>Tanggal Invoice</th><th>Sales</th><th></th></tr></thead>
+        <tbody id="bk-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-booking')">Tutup</button></div>
   </div>
 </div>
 <div class="modal-overlay" id="modal-invlist">
@@ -813,7 +869,8 @@ const DEFAULT_DB = {
     {id:'s5',nama:'Rina',kota:'Cikarang'},
   ],
   mesin:[],
-  spare:[]
+  spare:[],
+  invBook:[]
 };
 
 // ═══════════════════════════════════════════════════════
@@ -856,7 +913,10 @@ async function pullFromSheets(){
     if(result.code==='AUTH'){ forceReLogin_(); return false; }
     if(result.status === 'success' && result.data){
       const parsed = JSON.parse(result.data);
+      const localInv = Array.isArray(db && db.invBook) ? db.invBook : [];
       db = { ...DEFAULT_DB, ...parsed };
+      // Code.gs versi lama belum mengirim invBook -> pakai booking yang tersimpan lokal
+      if(!Array.isArray(parsed.invBook)) db.invBook = localInv;
       if(!db.ptInfo) db.ptInfo = DEFAULT_DB.ptInfo;
       if(!db.locations) db.locations = DEFAULT_DB.locations;
       if(!db.locationIcons) db.locationIcons = DEFAULT_DB.locationIcons;
@@ -2290,6 +2350,222 @@ function mapStatus_(v){
   return 'BELUM';
 }
 // Tanggal dari Excel: angka tanggal Excel, atau teks dd/mm/yyyy / yyyy-mm-dd
+// ═══════════════════════════════════════════════════════
+// BOOKING NOMOR INVOICE
+// db.invBook = [{id,no,customer,pic,telp,jenis,ket,tglInv,salesId,salesNama,createdAt}]
+// No otomatis = nomor terbesar + 1 (bisa diubah manual, tidak boleh dobel).
+// ═══════════════════════════════════════════════════════
+const BK_JENIS=['Acrylic','Jasa','Jasa Service','Mesin','Ongkir','Sparepart'];   // urut A-Z
+let bkEditingId=null, bkLastSavedId=null;
+function invBook_(){ if(!Array.isArray(db.invBook)) db.invBook=[]; return db.invBook; }
+function bkNextNo_(){ return invBook_().reduce((m,b)=>Math.max(m,Number(b.no)||0),0)+1; }
+function bkToday_(){ const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+function bkJenisCanon_(v){
+  const t=String(v||'').trim(); if(!t) return '';
+  return BK_JENIS.find(j=>j.toLowerCase()===t.toLowerCase().replace(/\s+/g,' '))||t;
+}
+// Daftar customer untuk dropdown: dari booking + dari transaksi Mesin/Sparepart (unik, A-Z)
+function bkCustomers_(){
+  const m=new Map();
+  [...invBook_(),...(db.mesin||[]),...(db.spare||[])].forEach(r=>{
+    const c=String(r.customer||'').trim(); if(c && !m.has(c.toLowerCase())) m.set(c.toLowerCase(),c);
+  });
+  return [...m.values()].sort((a,b)=>a.localeCompare(b,'id',{sensitivity:'base'}));
+}
+function bkFillOptions_(cur){
+  document.getElementById('bk-cust-list').innerHTML=bkCustomers_().map(c=>`<option value="${escAttr_(c)}"></option>`).join('');
+  const jenis=[...BK_JENIS]; if(cur&&cur.jenis&&!jenis.includes(cur.jenis)) jenis.push(cur.jenis);
+  document.getElementById('bk-jenis').innerHTML='<option value="">— Pilih Jenis —</option>'+jenis.map(j=>`<option value="${escAttr_(j)}">${escAttr_(j)}</option>`).join('');
+  let so='<option value="">— Pilih Sales —</option>';
+  (db.locations||[]).forEach(city=>{
+    const ss=db.sales.filter(s=>s.kota===city); if(!ss.length) return;
+    so+=`<optgroup label="${escAttr_(city)}">`+ss.map(s=>`<option value="${s.id}">${escAttr_(s.nama)}</option>`).join('')+'</optgroup>';
+  });
+  const orphan=db.sales.filter(s=>!(db.locations||[]).includes(s.kota));
+  so+=orphan.map(s=>`<option value="${s.id}">${escAttr_(s.nama)}</option>`).join('');
+  if(cur&&!cur.salesId&&cur.salesNama) so+=`<option value="__name__">${escAttr_(cur.salesNama)} (belum terdaftar)</option>`;
+  document.getElementById('bk-sales').innerHTML=so;
+}
+function openBooking(){
+  bkLastSavedId=null;
+  bkResetForm_();
+  document.getElementById('bk-search').value='';
+  renderBookingList();
+  openModal('modal-booking');
+  closeSidebarMobile();
+}
+function bkResetForm_(){
+  bkEditingId=null;
+  bkFillOptions_(null);
+  document.getElementById('bk-no').value=bkNextNo_();
+  ['bk-cust','bk-pic','bk-telp','bk-ket'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('bk-jenis').value='';
+  document.getElementById('bk-sales').value=currentSalesId&&db.sales.some(s=>s.id===currentSalesId)?currentSalesId:'';
+  document.getElementById('bk-tgl').value=bkToday_();
+  document.getElementById('bk-form-title').textContent='Ambil Nomor Baru';
+  document.getElementById('bk-no-hint').textContent='Otomatis nomor berikutnya';
+  document.getElementById('bk-save-btn').innerHTML='💾 Simpan &amp; Ambil Nomor';
+  document.getElementById('bk-cancel-edit').style.display='none';
+  document.querySelector('#modal-booking .bk-form').classList.remove('editing');
+}
+// Customer lama dipilih: PIC & No Telp terisi otomatis dari booking terakhirnya (kalau masih kosong)
+function bkFillFromCust_(){
+  if(bkEditingId) return;
+  const c=document.getElementById('bk-cust').value.trim().toLowerCase(); if(!c) return;
+  const last=[...invBook_()].sort((a,b)=>(Number(b.no)||0)-(Number(a.no)||0)).find(b=>String(b.customer||'').trim().toLowerCase()===c);
+  if(!last) return;
+  const pic=document.getElementById('bk-pic'), tel=document.getElementById('bk-telp');
+  if(!pic.value&&last.pic) pic.value=last.pic;
+  if(!tel.value&&last.telp) tel.value=last.telp;
+}
+function editBooking(id){
+  const b=invBook_().find(x=>x.id===id); if(!b) return;
+  bkEditingId=id;
+  bkFillOptions_(b);
+  document.getElementById('bk-no').value=b.no;
+  document.getElementById('bk-cust').value=b.customer||'';
+  document.getElementById('bk-pic').value=b.pic||'';
+  document.getElementById('bk-telp').value=b.telp||'';
+  document.getElementById('bk-jenis').value=b.jenis||'';
+  document.getElementById('bk-ket').value=b.ket||'';
+  document.getElementById('bk-tgl').value=b.tglInv||'';
+  document.getElementById('bk-sales').value=b.salesId||(b.salesNama?'__name__':'');
+  document.getElementById('bk-form-title').textContent='Edit Booking No '+b.no;
+  document.getElementById('bk-no-hint').textContent='Nomor yang sedang diedit';
+  document.getElementById('bk-save-btn').innerHTML='💾 Simpan Perubahan';
+  document.getElementById('bk-cancel-edit').style.display='';
+  document.querySelector('#modal-booking .bk-form').classList.add('editing');
+  document.querySelector('#modal-booking .modal').scrollTop=0;
+}
+async function saveBooking(){
+  const no=parseInt(document.getElementById('bk-no').value,10);
+  const customer=document.getElementById('bk-cust').value.trim();
+  if(!(no>0)){ toast('Nomor invoice harus angka lebih dari 0','error'); return; }
+  if(!customer){ toast('Nama Customer wajib diisi','error'); document.getElementById('bk-cust').focus(); return; }
+  const dup=invBook_().find(b=>Number(b.no)===no && b.id!==bkEditingId);
+  if(dup){ toast(`Nomor ${no} sudah dipakai untuk ${dup.customer||'-'}`,'error'); return; }
+  const sv=document.getElementById('bk-sales').value;
+  const prev=bkEditingId?invBook_().find(b=>b.id===bkEditingId):null;
+  const sales=db.sales.find(s=>s.id===sv);
+  const rec={
+    id:bkEditingId||uid(), no, customer,
+    pic:document.getElementById('bk-pic').value.trim(),
+    telp:document.getElementById('bk-telp').value.trim(),
+    jenis:document.getElementById('bk-jenis').value,
+    ket:document.getElementById('bk-ket').value.trim(),
+    tglInv:document.getElementById('bk-tgl').value,
+    salesId:sales?sales.id:'',
+    salesNama:sales?sales.nama:(sv==='__name__'&&prev?prev.salesNama||'':''),
+    createdAt:prev?prev.createdAt||'':new Date().toISOString()
+  };
+  if(bkEditingId){ const i=invBook_().findIndex(b=>b.id===bkEditingId); invBook_()[i]=rec; }
+  else invBook_().push(rec);
+  bkLastSavedId=rec.id;
+  await saveData();
+  toast(bkEditingId?`Booking No ${no} diperbarui`:`Nomor ${no} dibooking untuk ${customer}`);
+  bkResetForm_();
+  document.getElementById('bk-search').value='';
+  renderBookingList();
+}
+function deleteBooking(id){
+  const b=invBook_().find(x=>x.id===id); if(!b) return;
+  if(!confirm(`Hapus booking No ${b.no} (${b.customer||'-'})?`)) return;
+  db.invBook=invBook_().filter(x=>x.id!==id);
+  if(bkEditingId===id) bkResetForm_(); else document.getElementById('bk-no').value=bkEditingId?document.getElementById('bk-no').value:bkNextNo_();
+  saveData(); renderBookingList(); toast(`Booking No ${b.no} dihapus`);
+}
+function bkSalesName_(b){ const s=db.sales.find(x=>x.id===b.salesId); return s?s.nama:(b.salesNama||''); }
+function renderBookingList(){
+  const q=String(document.getElementById('bk-search').value||'').trim().toLowerCase();
+  const all=[...invBook_()].sort((a,b)=>(Number(b.no)||0)-(Number(a.no)||0));
+  const list=q?all.filter(b=>[b.no,b.customer,b.pic,b.telp,b.jenis,b.ket,bkSalesName_(b),fmtDate(b.tglInv)].some(v=>String(v||'').toLowerCase().includes(q))):all;
+  document.getElementById('bk-count').textContent=q?`${list.length} dari ${all.length} booking`:`${all.length} booking · nomor berikutnya: ${bkNextNo_()}`;
+  const tb=document.getElementById('bk-tbody');
+  if(!list.length){ tb.innerHTML=`<tr><td colspan="9" style="text-align:center;padding:22px;color:#999">${all.length?'Tidak ada yang cocok':'Belum ada booking nomor invoice'}</td></tr>`; return; }
+  tb.innerHTML=list.map(b=>`<tr class="${b.id===bkLastSavedId?'bk-new':''}">
+    <td class="bk-no">${escAttr_(b.no)}</td><td><b>${escAttr_(b.customer)||'-'}</b></td><td>${escAttr_(b.pic)||'-'}</td><td>${escAttr_(b.telp)||'-'}</td>
+    <td>${escAttr_(b.jenis)||'-'}</td><td>${escAttr_(b.ket)||'-'}</td><td style="white-space:nowrap">${fmtDate(b.tglInv)}</td><td>${escAttr_(bkSalesName_(b))||'-'}</td>
+    <td style="white-space:nowrap"><button class="icon-btn" title="Edit" onclick="editBooking('${b.id}')">✏️</button><button class="icon-btn del" title="Hapus" onclick="requireAuth(deleteBooking,'${b.id}')">🗑️</button></td></tr>`).join('');
+}
+
+// ── Format & Import Booking Invoice ──
+const BK_COLS=[['No',6],['Nama Cust',30],['PIC',18],['No Telp',16],['Jenis',14],['Ket',28],['Tanggal Invoice',15],['Sales',14]];
+const BK_ALIASES={no:['no','nomor','no invoice','nomor invoice','no inv'],customer:['nama cust','nama customer','customer','cust'],pic:['pic','pic cust'],
+  telp:['no telp','no tlp','telp','no hp','telepon','no telepon'],jenis:['jenis'],ket:['ket','keterangan'],
+  tglInv:['tanggal invoice','tgl invoice','tanggal inv','tgl inv','tanggal'],sales:['sales']};
+function downloadBookingTemplate(){
+  if(typeof XLSX==='undefined'){ toast('Komponen Excel belum termuat, cek koneksi internet','error'); return; }
+  const bd={top:{style:'thin'},bottom:{style:'thin'},left:{style:'thin'},right:{style:'thin'}};
+  const ws={};
+  BK_COLS.forEach(([h],c)=>{ ws[XLSX.utils.encode_cell({r:0,c})]={t:'s',v:h,s:{font:{name:'Calibri',sz:10,bold:true},fill:{fgColor:{rgb:'FFD966'}},alignment:{horizontal:'center'},border:bd}}; });
+  ws['!ref']='A1:H1'; ws['!cols']=BK_COLS.map(([,w])=>({wch:w}));
+  const info=XLSX.utils.aoa_to_sheet([['PETUNJUK IMPORT BOOKING NOMOR INVOICE'],[''],
+    ['• Isi mulai baris ke-2 sheet "Booking Invoice". 1 baris = 1 nomor invoice.'],
+    ['• No: angka nomor invoice. Kalau dikosongkan, aplikasi memberi nomor berikutnya otomatis.'],
+    ['• Nomor yang sudah ada di aplikasi tidak diimport ulang (dilewati).'],
+    ['• Jenis: '+BK_JENIS.join(', ')+'.'],
+    ['• Tanggal Invoice: format tanggal Excel, contoh 14/10/2026.'],
+    ['• Sales: nama sales seperti di aplikasi (boleh tanpa sapaan, "Edi" = "P\'Edi").']]);
+  info['!cols']=[{wch:95}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Booking Invoice');
+  XLSX.utils.book_append_sheet(wb,info,'Petunjuk');
+  XLSX.writeFile(wb,'Format_Import_Booking_Invoice.xlsx');
+}
+function importBookingFile(input){
+  const file=input.files[0]; if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('Komponen Excel belum termuat, cek koneksi internet','error'); input.value=''; return; }
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    input.value='';
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:false});
+      let rows=null, hi=-1, col=null;
+      for(const name of wb.SheetNames){
+        const r=XLSX.utils.sheet_to_json(wb.Sheets[name],{header:1,raw:true,defval:''});
+        for(let i=0;i<Math.min(r.length,15);i++){
+          const h=(r[i]||[]).map(normalizeHeader_);
+          const c={}; Object.keys(BK_ALIASES).forEach(k=>{ c[k]=-1; for(const a of BK_ALIASES[k]){ const x=h.indexOf(a); if(x>-1){ c[k]=x; break; } } });
+          if(c.customer>-1 && (c.no>-1||c.tglInv>-1)){ rows=r; hi=i; col=c; break; }
+        }
+        if(rows) break;
+      }
+      if(!rows){ toast('Kolom "Nama Cust" tidak ditemukan. Pakai Download Format.','error'); return; }
+      const g=(r,k)=>col[k]>-1?r[col[k]]:'';
+      const used=new Set(invBook_().map(b=>Number(b.no)));
+      let next=bkNextNo_();
+      const add=[], skipped=[], warn=[];
+      for(let i=hi+1;i<rows.length;i++){
+        const r=rows[i]; if(!r||r.every(v=>String(v).trim()==='')) continue;
+        const customer=cleanTxt_(g(r,'customer'));
+        if(!customer){ continue; }
+        const rawNo=String(g(r,'no')).trim();
+        let no=rawNo?parseInt((rawNo.match(/\d+/)||[''])[0],10):NaN;
+        if(rawNo && !(no>0)){ warn.push(`Baris ${i+1}: No "${rawNo}" bukan angka, diberi nomor otomatis.`); no=NaN; }
+        if(!(no>0)){ while(used.has(next)) next++; no=next; }
+        if(used.has(no)){ skipped.push(no); continue; }
+        used.add(no); if(no>=next) next=no+1;
+        const sn=cleanTxt_(g(r,'sales')); const sl=sn?findSalesByName_(sn):null;
+        if(sn&&!sl) warn.push(`Baris ${i+1}: sales "${sn}" tidak ditemukan di aplikasi (nama tetap disimpan).`);
+        const rawT=g(r,'tglInv'); const tgl=String(rawT).trim()?excelDateToStr_(rawT):'';
+        if(String(rawT).trim()&&!tgl) warn.push(`Baris ${i+1}: tanggal "${String(rawT).trim()}" tidak terbaca (dikosongkan).`);
+        add.push({id:uid(),no,customer,pic:cleanTxt_(g(r,'pic')),telp:cleanTxt_(g(r,'telp')),jenis:bkJenisCanon_(g(r,'jenis')),
+          ket:cleanTxt_(g(r,'ket')),tglInv:tgl||'',salesId:sl?sl.id:'',salesNama:sl?sl.nama:sn,createdAt:new Date().toISOString()});
+      }
+      if(!add.length){ toast(skipped.length?`Semua nomor (${skipped.length}) sudah ada di aplikasi, tidak ada yang diimport`:'Tidak ada baris yang bisa diimport','error'); return; }
+      let msg=`${add.length} booking nomor invoice akan diimport (No ${Math.min(...add.map(a=>a.no))} s/d ${Math.max(...add.map(a=>a.no))}).`;
+      if(skipped.length) msg+=`\n${skipped.length} baris dilewati karena nomornya sudah ada: ${skipped.slice(0,15).join(', ')}${skipped.length>15?', ...':''}`;
+      if(warn.length) msg+=`\n\nCatatan:\n${warn.slice(0,10).join('\n')}${warn.length>10?`\n... dan ${warn.length-10} catatan lain`:''}`;
+      if(!confirm(msg+'\n\nLanjutkan import?')) return;
+      invBook_().push(...add);
+      await saveData();
+      bkLastSavedId=null; bkResetForm_(); renderBookingList();
+      toast(`${add.length} booking nomor invoice berhasil diimport`);
+    }catch(err){ console.error(err); toast('Gagal membaca file: '+err.message,'error'); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
 function excelDateToStr_(val){
   const pad=n=>String(n).padStart(2,'0');
   if(val instanceof Date && !isNaN(val)){
