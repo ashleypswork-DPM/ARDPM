@@ -1022,7 +1022,7 @@ function setSyncStatus(text){
 // ter-tulis di URL (browser history / server access log).
 // Code.gs yang terpasang (deployment /exec) masih versi lama -> Booking Nomor Invoice,
 // NPWP, dll. TIDAK ikut tersimpan ke Sheets. Tampilkan peringatan supaya kelihatan.
-const API_VERSION_NEEDED=4;
+const API_VERSION_NEEDED=5;
 let oldServerWarned_=false;
 function warnOldServer_(result){
   if(result && Number(result.apiVersion)>=API_VERSION_NEEDED) return false;
@@ -1082,7 +1082,7 @@ function payHasDP_(list){ return !!(list&&list[0]&&list[0].label==='DP'); }
 function payLabel_(i,hasDP){ return hasDP ? (i===0?'DP':'Pembayaran '+i) : 'Pembayaran '+(i+1); }
 function labelPayments_(list){
   const dp=payHasDP_(list);
-  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',fp:!!p.fp,tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||'',...(p.buktiId?{buktiId:p.buktiId,buktiUrl:p.buktiUrl||''}:{})}));
+  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',fp:!!p.fp,tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||'',...(p.buktiId?{buktiId:p.buktiId,buktiUrl:p.buktiUrl||'',buktiName:p.buktiName||''}:{})}));
 }
 // A/R = Total − (semua pembayaran + PPh Jasa + Biaya Admin), dihitung kalau History Pembayaran
 // sudah berisi angka. Status otomatis LUNAS kalau sudah tertutup penuh.
@@ -2256,7 +2256,7 @@ async function uploadBuktiRow_(row,prefix,src){
     const idx=payRows.indexOf(row);
     const name=`${cust}_${idx>=0?payLabel_(idx,payHasDP_(payRows)):'Pembayaran'}_${row.tgl||new Date().toISOString().slice(0,10)}.jpg`.replace(/[^\w.\- ]+/g,'_');
     const j=await apiPost_('uploadBukti',{name,mime:'image/jpeg',data:small.split(',')[1],desc:`${cust} — ${fmt(row.jumlah)} — ${row.tgl||''}`});
-    row.buktiId=j.id; row.buktiUrl=j.url;
+    row.buktiId=j.id; row.buktiUrl=j.url; row.buktiName='';
     await saveImage('drive_'+j.id, small).catch(()=>{});
     toast(`Bukti ter-upload (${Math.round(b64Bytes_(small)/1024)} KB)`);
   }catch(e){
@@ -2266,6 +2266,31 @@ async function uploadBuktiRow_(row,prefix,src){
     if(currentPayPrefix===prefix) renderPayRows(prefix);
   }
 }
+// ── Nama file bukti & bersih-bersih Drive (jalan otomatis setelah Simpan) ──
+// Nama: "<No Invoice>/DPM/<tahun>_Bukti Transfer" (No Invoice berupa angka), atau "<No Invoice>_Bukti Transfer"
+// kalau No Invoice sudah lengkap. Bukti yang diganti / dihapus dipindah ke Sampah Drive (bisa dipulihkan 30 hari).
+function buktiFileName_(p,r,i){
+  const no=String(p.noInv||'').trim();
+  const yr=(/^\d{4}/.test(p.tgl||'')?String(p.tgl).slice(0,4):(/^\d{4}/.test(r.tglInv||'')?String(r.tglInv).slice(0,4):String(new Date().getFullYear())));
+  const cust=String(r.customer||'').trim()||'Customer';
+  if(/^\d+$/.test(no)) return `${no}/DPM/${yr}_Bukti Transfer ${cust}.jpg`;
+  if(no) return `${no}_Bukti Transfer ${cust}.jpg`;
+  return `Tanpa No Invoice_${payLabel_(i,payHasDP_(r.payments||[]))}_Bukti Transfer ${cust}.jpg`;
+}
+async function syncBuktiFiles_(r, oldPays){
+  const keep=new Set((r&&r.payments||[]).filter(payVerified_).map(p=>p.buktiId));
+  const trash=[...new Set((oldPays||[]).filter(payVerified_).map(p=>p.buktiId).filter(id=>!keep.has(id)))];
+  const rename=[];
+  if(r) (r.payments||[]).forEach((p,i)=>{ if(!payVerified_(p)) return; const nm=buktiFileName_(p,r,i); if(nm!==p.buktiName) rename.push({id:p.buktiId,name:nm,p}); });
+  if(!trash.length && !rename.length) return;
+  try{
+    await apiPost_('syncBukti',{rename:rename.map(x=>({id:x.id,name:x.name})),trash});
+    rename.forEach(x=>{ x.p.buktiName=x.name; });
+    trash.forEach(id=>deleteImage('drive_'+id).catch(()=>{}));
+    if(rename.length) await saveData();
+  }catch(e){ console.warn('syncBukti gagal',e); }
+}
+
 async function handleBuktiUpload(idx,input,prefix){
   const file=input.files[0]; input.value=''; if(!file) return;
   if(!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)){ toast('Bukti harus berupa gambar (JPG/PNG). PDF belum bisa — screenshot dulu.','error'); return; }
@@ -2676,6 +2701,7 @@ async function saveMesin(){
   data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
   syncArStatus_(data,true);   // A/R & status mengikuti History Pembayaran
   const finalId=editingId||uid();
+  const oldPaysM=editingId?((db.mesin.find(m=>m.id===editingId)||{}).payments||[]).map(p=>({...p})):[];
   if(editingId){const idx=db.mesin.findIndex(m=>m.id===editingId);db.mesin[idx]={...db.mesin[idx],...data};}
   else db.mesin.push({id:finalId,...data});
   // Save images
@@ -2686,12 +2712,14 @@ async function saveMesin(){
     if(it._imgData) await saveImage(`mesin_${finalId}_item_${i}_seri`,it._imgData);
   }
   await saveData();closeModal('modal-mesin');renderSidebar();renderMain();
+  syncBuktiFiles_(db.mesin.find(m=>m.id===finalId), oldPaysM);
   toast('Data mesin disimpan');
 }
 async function deleteMesin(id){
   if(!confirm('Hapus data ini?')) return;
   const r=db.mesin.find(m=>m.id===id);
   db.mesin=db.mesin.filter(m=>m.id!==id);
+  if(r) syncBuktiFiles_(null, r.payments);
   await deleteImage(`mesin_${id}_seri`).catch(()=>{});
   const n=(r&&r.items)?r.items.length:1;
   for(let i=0;i<n;i++){ await deleteImage(`mesin_${id}_item_${i}_seri`).catch(()=>{}); }
@@ -2782,17 +2810,21 @@ async function saveSpare(){
   data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
   syncArStatus_(data,true);   // A/R & status mengikuti History Pembayaran
   const finalId=editingId||uid();
+  const oldPaysS=editingId?((db.spare.find(m=>m.id===editingId)||{}).payments||[]).map(p=>({...p})):[];
   if(editingId){const idx=db.spare.findIndex(m=>m.id===editingId);db.spare[idx]={...db.spare[idx],...data};}
   else db.spare.push({id:finalId,...data});
   for(const [i,p] of payRows.entries()){
     if(p._imgData) await saveImage(`spare_${finalId}_pay_${i}`,p._imgData);
   }
   await saveData();closeModal('modal-spare');renderSidebar();renderMain();
+  syncBuktiFiles_(db.spare.find(m=>m.id===finalId), oldPaysS);
   toast('Data sparepart disimpan');
 }
 async function deleteSpare(id){
   if(!confirm('Hapus data ini?')) return;
+  const rs=db.spare.find(m=>m.id===id);
   db.spare=db.spare.filter(m=>m.id!==id);
+  if(rs) syncBuktiFiles_(null, rs.payments);
   await saveData();renderSidebar();renderMain();
   toast('Data dihapus','info');
 }
