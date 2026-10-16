@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="page-title">AR Management</title>
 <!-- PWA: bikin app ini bisa di-"Install" seperti aplikasi asli (ikon sendiri, tanpa address bar) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#0b3d91">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
@@ -17,9 +20,10 @@
   --danger:#e74c3c;--bg:#f0f4f8;--sidebar-bg:#16304f;--card:#ffffff;
   --border:#dde3ec;--text:#1e2d3d;--text-light:#6b7c93;
   --lunas:#27ae60;--belum:#e74c3c;--progress:#f39c12;
-  --font:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
+  --font:'Plus Jakarta Sans','Segoe UI',Tahoma,Geneva,Verdana,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
+button,input,select,textarea{font-family:inherit;}
 body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;height:100vh;overflow:hidden;}
 
 /* SIDEBAR */
@@ -87,6 +91,13 @@ body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex
 @media (max-width:860px){ .form-grid.bk-grid{grid-template-columns:1fr 1fr;} }
 .btn-sidebar.danger-s{background:rgba(231,76,60,.12);border-color:rgba(231,76,60,.25);color:#ff8a7a;}
 .btn-sidebar.danger-s:hover{background:rgba(231,76,60,.22);}
+.side-ico{width:16px;height:16px;flex-shrink:0;opacity:.9;}
+.side-ico.color{opacity:1;}
+.side-caret{margin-left:auto;font-size:10px;transition:transform .18s;opacity:.8;}
+.side-group.open .side-caret{transform:rotate(90deg);}
+.side-children{display:none;margin:-1px 0 6px 12px;padding-left:8px;border-left:1px solid rgba(255,255,255,.14);}
+.side-group.open .side-children{display:block;}
+.btn-sidebar.side-child{font-size:11.5px;padding:6px 9px;margin-bottom:4px;background:rgba(255,255,255,.03);}
 
 /* MAIN */
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
@@ -433,15 +444,30 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
   <div class="db-info" id="db-info">💾 IndexedDB — Penyimpanan Lokal</div>
   <div class="db-info" id="sync-status">☁️ Menghubungkan ke Google Sheets...</div>
   <div class="sidebar-actions">
-    <button class="btn-sidebar book" onclick="openBooking()">🧾 Booking Nomor Invoice</button>
-    <button class="btn-sidebar" onclick="openFixPpn()">🛠️ Perbaiki PPN Manual</button>
-    <button class="btn-sidebar loc" onclick="requireAuth(openManageLocations)">📍 Kelola Lokasi</button>
-    <button class="btn-sidebar" onclick="requireAuth(openManageSales)">👤 Kelola Sales</button>
-    <button class="btn-sidebar" onclick="openImportModal()">📥 Import dari Excel</button>
+    <div class="side-group" id="sg-tools">
+      <button class="btn-sidebar side-parent book" onclick="toggleSideGroup_('sg-tools')"><img class="side-ico" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAEv0lEQVR42u2aTYiVVRjHf+97r+NIoX0XBUWONg1RWNEiCiOiQvuAWbToiwqKEDdtpW30sWpTLVpFJYKLsII2YQVl0vcEqWiaFmhZUhudcca577+F/wOPr+/9nDt6JzrwcO89973n/J/nPN/nZpLocWSB5jIUqOtR73HTGtDoddM2a3YnxR5OIAcKv18BnDNH4MeAvRVrd3h+UjeU+3WtpG8lTUkq5khTXmttaY+OqJsTSEf8APAB8zMeBD7sRp06ZSAZ6jCwC7jKn78B9vjo1YMTKIBrgFs89yswBhwPBt4XFar59VadHIWkrV2qXyv6xGvKe8Q9W1LepdTOt1Qy4MtwKjV7tG6o5t8CbPOa8h49udFaWKRK/yn5/SHPq+Pjro4BNa8V16+FPatUT8lG6mGyldE0gstL47jnG3Mw2kZYK7rVTtbNAEUjfgi430dYjrDJ4C4JBrfPBl2bQ0BLghsDRoJj+LPCMaRo/TfwEbA5eaFFwFvAIyyssQl4og48b/ANS3O6jcTyIJGiT2DycOJFmxNdbKwPA3sySYeBi4AZYB3weQtjPpsjYVoNvGHDP5JJmrXkfwBuWiDq8z1wI9CIbnQ2uC4NKPAsYD0tDiSPkA04A4oeMmeBj/8ZGCQG1If69kzawWkl3PACYCKBT1lskQOHPDkKrDJDQwMIfsjYVhmrgIM58K45GwLeAS51VG6V0rZSyXZ1QLd2l3DMGNvbxpoBG5G0TNLOUBHtlXRvqfKpu0LK+liFNaPMe9VL8/cYW6oId0haltLp24AvHOFScHsfeA34tJSb56WETiHdXgE8CiwqRc5kdCeAjW6j5OG3MZErSnvdCawHxkMUrgO3A9sSxyNqPn6U9KKkO3xaraS3Xe3H9jZrLJW0WtILkiZarDMiKatbCouCNH5xSj1mjm8wbbDB73Dit8OS/B04AhwFLrSEFE6BIP3Mz2RuiF0MXOZi5nob6HXAFRW2sMeSX34KZnM9KmnWnG2StFjSU+48TLWR6KSkQ9bJo577S9K4pPtM456Tn/lJ0kH/ttWYkvSZpGckLTE2GeuoJKoY2FI60lFJ6yW9J2m/pBMdqMmBCtU40MHvZmyomyWtSyADbSkzUNXcLYJbnQF2m14HlgBXA9ealgNXula+ALjcLm8pcK7VCr9fGgr5P4B/gMPAb1bFXab9paowYik67U4r6HIePMYUsNNUjpBLHFPGgfOAV4GX/P0Gz+G25OOhq9HM92fBK802S/E7aa9H15ZV3AukE5sEXgnu7mngsVKaAvCyWyd5E5esblo13UbFVMg3LJXZ8LkGfAU8GwAMh7yl4e++9rNRurP+vl1B37cLjmZNqhx40yCfDK54l1s3E36m0a9N631OuAoDnACea3M5MpAMRCYi2LwiTRhYBqpymmKe9vlv1sT9uDqdr2osa6ZCWSnpUpPvzsZIWKaN7ZQmVwI5GdzgSr9OD5D0U5xZGQLdJJxsryc1+s7prPx+N71d3s2H6hSug2/25wm/J5OUrjTvAj5eAK0VAXcDW4FaHlRnK7DG0p8u5SaDQNPuSq8x1hxoxCumGHhWumLSAHmgY8DPZazli+6e/nBxhscpGKtu6vv1N5r50P3T/pbzL7J/LCHKHkC5AAAAAElFTkSuQmCC" alt=""> Alat Bantu <span class="side-caret">▸</span></button>
+      <div class="side-children">
+        <button class="btn-sidebar side-child" onclick="openBooking()">🧾 Booking Nomor Invoice</button>
+        <button class="btn-sidebar side-child" onclick="openFixPpn()">🛠️ Perbaiki PPN Manual</button>
+        <button class="btn-sidebar side-child" onclick="openImportModal()">📥 Import dari Excel</button>
+      </div>
+    </div>
+    <div class="side-group" id="sg-loc">
+      <button class="btn-sidebar side-parent loc" onclick="toggleSideGroup_('sg-loc')"><img class="side-ico" src="data:image/png;base64,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" alt=""> Kelola Lokasi dan Sales <span class="side-caret">▸</span></button>
+      <div class="side-children">
+        <button class="btn-sidebar side-child" onclick="requireAuth(openManageLocations)">📍 Kelola Lokasi</button>
+        <button class="btn-sidebar side-child" onclick="requireAuth(openManageSales)">👤 Kelola Sales</button>
+      </div>
+    </div>
     <button class="btn-sidebar" onclick="forceSyncNow()">🔄 Sync Sekarang</button>
-    <button class="btn-sidebar export" onclick="exportXLSX()">📥 Export Excel Laporan</button>
-    <button class="btn-sidebar danger-s" onclick="backupData()">💾 Backup Data</button>
-    <button class="btn-sidebar" onclick="restoreData()">📂 Restore Backup</button>
+    <button class="btn-sidebar export" onclick="exportXLSX()"><img class="side-ico color" src="data:image/png;base64,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" alt=""> Cetak AR</button>
+    <div class="side-group" id="sg-backup">
+      <button class="btn-sidebar side-parent danger-s" onclick="toggleSideGroup_('sg-backup')"><img class="side-ico" src="data:image/png;base64,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" alt=""> Backup dan Restore <span class="side-caret">▸</span></button>
+      <div class="side-children">
+        <button class="btn-sidebar side-child" onclick="backupData()">💾 Backup Data</button>
+        <button class="btn-sidebar side-child" onclick="restoreData()">📂 Restore Backup</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1961,6 +1987,10 @@ function invSuggestEl_(){
     document.addEventListener('keydown',e=>{ if(e.key==='Escape') hideInvSuggest_(); });
   }
   return el;
+}
+function toggleSideGroup_(id){
+  document.querySelectorAll('.side-group').forEach(g=>{ if(g.id!==id) g.classList.remove('open'); });
+  document.getElementById(id).classList.toggle('open');
 }
 function hideInvSuggest_(){ const el=document.getElementById('inv-suggest'); if(el) el.classList.remove('open'); invSuggestCtx_=null; }
 function showInvSuggest_(input,i,prefix){
