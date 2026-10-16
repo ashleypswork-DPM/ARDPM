@@ -207,6 +207,14 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .fp-badge.fp-ok{background:#e8f8ef;color:var(--lunas);}
 .pay-list th.fp-th,.pay-list td.fp-td{text-align:center;width:34px;}
 .fp-check{width:16px;height:16px;cursor:pointer;accent-color:var(--lunas);}
+.fix-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+.fix-table th{background:#f5f7fa;padding:7px 8px;text-align:left;font-size:10px;color:var(--text-light);text-transform:uppercase;position:sticky;top:0;}
+.fix-table td{padding:7px 8px;border-bottom:1px solid #f0f2f5;vertical-align:top;}
+.fix-table td.num{text-align:right;white-space:nowrap;}
+.fix-table .old{color:#9aa5b1;text-decoration:line-through;display:block;font-size:10.5px;}
+.fix-table .new{color:var(--primary);font-weight:700;display:block;}
+.fix-wrap{max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:8px;}
+.fix-skip{margin-top:12px;font-size:11.5px;color:#8a5a00;background:#fff8e6;border:1px solid #f3d48a;border-radius:8px;padding:8px 11px;}
 #m-pay-list,#s-pay-list,#m-item-list,#s-item-list{overflow-x:auto;}
 .pay-edit:not(.with-tax) .tax-col{display:none;}
 .pay-edit td.tax-val{white-space:nowrap;color:#5a6b80;font-weight:600;text-align:right;background:#f7f9fc;font-size:10.5px;}
@@ -424,6 +432,7 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
   <div class="db-info" id="sync-status">☁️ Menghubungkan ke Google Sheets...</div>
   <div class="sidebar-actions">
     <button class="btn-sidebar book" onclick="openBooking()">🧾 Booking Nomor Invoice</button>
+    <button class="btn-sidebar" onclick="openFixPpn()">🛠️ Perbaiki PPN Manual</button>
     <button class="btn-sidebar loc" onclick="requireAuth(openManageLocations)">📍 Kelola Lokasi</button>
     <button class="btn-sidebar" onclick="requireAuth(openManageSales)">👤 Kelola Sales</button>
     <button class="btn-sidebar" onclick="openImportModal()">📥 Import dari Excel</button>
@@ -625,6 +634,18 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
       </table></div>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-booking')">Tutup</button></div>
+  </div>
+</div>
+<!-- MODAL: PERBAIKI PPN MANUAL -> FORMAT NPWP -->
+<div class="modal-overlay" id="modal-fixppn">
+  <div class="modal" style="max-width:1100px">
+    <div class="modal-header"><h3>🛠️ Perbaiki PPN Manual → NPWP 000</h3><button class="modal-close" onclick="closeModal('modal-fixppn')">×</button></div>
+    <div class="modal-body" id="fixppn-body"></div>
+    <div class="modal-footer">
+      <span id="fixppn-count" style="margin-right:auto;font-size:12px;color:var(--text-light)"></span>
+      <button class="btn btn-outline" onclick="closeModal('modal-fixppn')">Tutup</button>
+      <button class="btn btn-primary" id="fixppn-btn" onclick="requireAuth(applyFixPpn_)">🛠️ Perbaiki yang Dicentang</button>
+    </div>
   </div>
 </div>
 <div class="modal-overlay" id="modal-invlist">
@@ -1987,6 +2008,90 @@ function takeNewInvNo_(){
     customer:document.getElementById(px+'-customer').value.trim(),
     pic:document.getElementById(px+'-pic').value.trim(),
     jenis, tgl:p.tgl||'', label:payLabel_(c.i,payHasDP_(payRows))});
+}
+
+// ═══════════════════════════════════════════════════════
+// PERBAIKI PPN MANUAL -> NPWP "000"
+// Transaksi lama yang PPN-nya diketik manual (Harga/Unit belum termasuk PPN) diubah ke format NPWP:
+// NPWP = 000, Harga/Unit = Harga × 1,11 (jadi termasuk PPN), DPP Total & PPN dihitung otomatis.
+// Hanya transaksi yang hasil hitungnya PERSIS sama dengan Total lama yang bisa dipilih.
+// ═══════════════════════════════════════════════════════
+let fixPpnCands_=[];
+function fixPpnPlan_(r){
+  const items=(r.items&&r.items.length)?r.items:[{barang:r.barang||'',qty:r.qty||1,harga:r.harga||0,seri:r.seri||''}];
+  const dpp=items.reduce((a,it)=>a+(Number(it.qty)||0)*(Number(it.harga)||0),0);
+  const ppnOld=Number(r.ppn)||0, disc=Number(r.discount)||0, totalOld=Number(r.total)||0;
+  const newItems=items.map(it=>({...it,harga:Math.round((Number(it.harga)||0)*1.11)}));
+  const sub=newItems.reduce((a,it)=>a+(Number(it.qty)||0)*it.harga,0);
+  const tt=newItems.reduce((a,it)=>{const q=Number(it.qty)||0,t=taxSplit_(it.harga);a.dpp+=q*t.dpp;a.ppn+=q*t.ppn;return a;},{dpp:0,ppn:0});
+  const totalNew=sub-disc;
+  let why='';
+  if(disc>0) why='Ada Discount — cek manual';
+  else if(Math.abs(ppnOld-Math.round(dpp*0.11))>1) why=`PPN lama ${fmt(ppnOld)} bukan 11% dari ${fmt(dpp)}`;
+  else if(Math.abs(totalNew-totalOld)>=1) why=`Hasil total ${fmt(totalNew)} ≠ total lama ${fmt(totalOld)}`;
+  return {items, newItems, dpp, ppnOld, totalOld, sub, dppNew:Math.round(tt.dpp), ppnNew:Math.round(tt.ppn), totalNew, ok:!why, why};
+}
+function openFixPpn(){
+  closeSidebarMobile();
+  const all=[];
+  [['mesin',db.mesin],['spare',db.spare]].forEach(([type,arr])=>(arr||[]).forEach(r=>{
+    if(String(r.npwp||'').trim()) return;          // sudah ber-NPWP
+    if(!((Number(r.ppn)||0)>0)) return;             // tidak ada PPN manual
+    all.push({type,r,plan:fixPpnPlan_(r)});
+  }));
+  fixPpnCands_=all;
+  const sName=id=>{const s=db.sales.find(x=>x.id===id);return s?s.nama:'-';};
+  const ok=all.filter(x=>x.plan.ok), bad=all.filter(x=>!x.plan.ok);
+  let h=`<p class="text-sm" style="margin-bottom:10px">Transaksi yang <b>PPN-nya diisi manual</b> dan belum ada NPWP. Setelah diperbaiki: NPWP = <b>000</b>, Harga/Unit menjadi <b>termasuk PPN</b> (× 1,11), DPP Total &amp; PPN terhitung otomatis, dan <b>Total tidak berubah</b>.<br>Saran: centang <b>1 transaksi dulu</b>, cek hasilnya di Edit, baru lanjutkan sisanya. Sebelum diproses, file Backup otomatis terunduh.</p>`;
+  if(!ok.length) h+=`<div class="is-empty" style="padding:16px;text-align:center;color:var(--text-light)">Tidak ada transaksi yang bisa diperbaiki otomatis.</div>`;
+  else{
+    h+=`<div class="fix-wrap"><table class="fix-table"><thead><tr><th><input type="checkbox" id="fix-all" onchange="document.querySelectorAll('.fix-cb').forEach(c=>c.checked=this.checked);fixPpnCount_()"></th><th>Customer</th><th>Sales · Jenis</th><th>Barang</th><th style="text-align:right">Harga/Unit</th><th style="text-align:right">DPP</th><th style="text-align:right">PPN</th><th style="text-align:right">Total</th></tr></thead><tbody>`;
+    ok.forEach(x=>{
+      const i=all.indexOf(x), r=x.r, pl=x.plan;
+      const harga=pl.items.map((it,k)=>`<span class="old">${fmt(Number(it.harga)||0)}</span><span class="new">${fmt(pl.newItems[k].harga)}${pl.items.length>1?` <small style="font-weight:400;color:var(--text-light)">× ${it.qty}</small>`:''}</span>`).join('');
+      h+=`<tr><td><input type="checkbox" class="fix-cb" data-i="${i}" onchange="fixPpnCount_()"></td>
+        <td><b>${escAttr_(r.customer)||'-'}</b><span class="text-sm" style="display:block">${fmtDate(r.tglPO)}</span></td>
+        <td>${escAttr_(sName(r.salesId))}<span class="text-sm" style="display:block">${x.type==='mesin'?'Mesin':escAttr_(r.jenis||'Sparepart')}</span></td>
+        <td style="max-width:200px">${escAttr_(r.barang)||'-'}</td>
+        <td class="num">${harga}</td>
+        <td class="num"><span class="old">${fmt(pl.dpp)}</span><span class="new">${fmt(pl.dppNew)}</span></td>
+        <td class="num"><span class="old">${fmt(pl.ppnOld)} (manual)</span><span class="new">${fmt(pl.ppnNew)} (otomatis)</span></td>
+        <td class="num"><span class="old">${fmt(pl.totalOld)}</span><span class="new">${fmt(pl.totalNew)}</span></td></tr>`;
+    });
+    h+=`</tbody></table></div>`;
+  }
+  if(bad.length){
+    h+=`<div class="fix-skip"><b>${bad.length} transaksi tidak diubah otomatis</b> (perlu dicek manual lewat Edit):<br>`+
+      bad.slice(0,30).map(x=>`• ${escAttr_(x.r.customer)||'-'} — ${escAttr_(x.r.barang)||'-'}: ${escAttr_(x.plan.why)}`).join('<br>')+(bad.length>30?`<br>… dan ${bad.length-30} lainnya`:'')+`</div>`;
+  }
+  document.getElementById('fixppn-body').innerHTML=h;
+  fixPpnCount_();
+  openModal('modal-fixppn');
+}
+function fixPpnCount_(){
+  const n=document.querySelectorAll('.fix-cb:checked').length, tot=document.querySelectorAll('.fix-cb').length;
+  document.getElementById('fixppn-count').textContent=`${n} dari ${tot} transaksi dicentang`;
+  document.getElementById('fixppn-btn').disabled=!n;
+}
+async function applyFixPpn_(){
+  const picks=[...document.querySelectorAll('.fix-cb:checked')].map(c=>fixPpnCands_[Number(c.dataset.i)]).filter(Boolean);
+  if(!picks.length){ toast('Centang dulu transaksi yang mau diperbaiki','error'); return; }
+  if(!confirm(`Perbaiki ${picks.length} transaksi?\nNPWP diisi 000 dan Harga/Unit diubah menjadi termasuk PPN. Total tidak berubah.\n\nFile Backup akan terunduh dulu sebagai cadangan.`)) return;
+  backupData();
+  let n=0;
+  picks.forEach(x=>{
+    const r=x.r, pl=fixPpnPlan_(r); if(!pl.ok) return;
+    r.npwp='000';
+    r.items=pl.newItems.map(it=>{ const o={...it}; Object.keys(o).forEach(k=>{ if(k.charAt(0)==='_') delete o[k]; }); return o; });
+    r.harga=r.items[0].harga;
+    r.dpp=pl.dppNew; r.ppn=pl.ppnNew; r.total=pl.totalNew;
+    syncArStatus_(r,false);
+    n++;
+  });
+  await saveData();
+  renderSidebar(); if(currentSalesId) renderMain(); else renderLanding();
+  toast(`${n} transaksi diperbaiki ke format NPWP 000`);
+  openFixPpn();
 }
 
 function renderPayRows(prefix){
