@@ -3808,6 +3808,18 @@ function buildInvoiceDoc_(id, type, payIdx){
 
     const bytes=new TextEncoder().encode(xml);
     docFile.content=bytes; docFile.size=bytes.length;
+    // Footer: transaksi sales wilayah Cikarang (Yoan, Riswandi, dst.) memakai alamat kantor Cikarang
+    const salesRec=db.sales.find(x=>x.id===r.salesId);
+    if(salesRec && /cikarang/i.test(String(salesRec.kota||''))){
+      const fIdx=zip.FullPaths.indexOf('Root Entry/word/footer1.xml');
+      if(fIdx>-1){
+        const fFile=zip.FileIndex[fIdx];
+        let fx=new TextDecoder('utf-8').decode(new Uint8Array(fFile.content));
+        fx=fx.replace('Green Sedayu Bizpark Daan Mogot Blok DM 1 No. 9 Kalideres',
+          'DELTA SILICON 3, Kawasan Industri Lippo Cikarang Jl. Trembesi Blok F19-9AA, Cicau, Kec. Cikarang Pusat, Kabupaten Bekasi, Jawa Barat 17531');
+        const fb=new TextEncoder().encode(fx); fFile.content=fb; fFile.size=fb.length;
+      }
+    }
     // Buang entri penanda bawaan pustaka supaya isi .docx tetap bersih
     zip.FullPaths.slice().forEach(fp=>{ if(fp.indexOf('Sh33tJ5')>-1) XLSX.CFB.utils.cfb_del(zip,fp); });
     const out=XLSX.CFB.write(zip,{fileType:'zip',type:'array',compression:true});
