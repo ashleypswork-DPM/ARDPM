@@ -220,6 +220,22 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .fp-check{width:16px;height:16px;cursor:pointer;accent-color:var(--lunas);}
 .item-edit td.currency{white-space:nowrap;}
 .item-edit tr.no-ppn td[id^="item-ppn"]{color:#b0b8c2;}
+.ly-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:4px;}
+.ly-tile{border-radius:10px;padding:12px 13px;border:1px solid var(--border);display:flex;flex-direction:column;gap:5px;}
+.ly-tile.ok{background:#f2fbf6;border-color:#cdeedc;}
+.ly-tile.bad{background:#fdf3f2;border-color:#f3d0cc;}
+.ly-head{font-size:10.5px;font-weight:800;letter-spacing:.5px;color:var(--text-light);display:flex;align-items:center;gap:6px;}
+.ly-tile.ok .ly-head{color:#1e8449;} .ly-tile.bad .ly-head{color:#c0392b;}
+.ly-delta{font-size:10px;font-weight:800;padding:1px 6px;border-radius:8px;letter-spacing:0;}
+.ly-delta.up{background:#e3f6ea;color:#1e8449;} .ly-delta.down{background:#fdecea;color:#c0392b;}
+.ly-big{font-size:24px;font-weight:800;color:var(--text);line-height:1.1;}
+.ly-big small{font-size:11px;font-weight:600;color:var(--text-light);}
+.ly-row{display:flex;justify-content:space-between;font-size:11.5px;color:var(--text-light);}
+.ly-row b{color:var(--text);}
+.ly-btn{margin-top:4px;border:1px solid var(--border);background:#fff;border-radius:6px;padding:5px 8px;font-size:11px;font-weight:700;cursor:pointer;color:var(--primary);}
+.ly-btn:disabled{opacity:.45;cursor:default;}
+.ly-note{font-size:10.5px;color:var(--text-light);margin-top:8px;}
+.ly-note a{color:var(--primary-light);cursor:pointer;font-weight:700;}
 .fix-table{width:100%;border-collapse:collapse;font-size:11.5px;}
 .fix-table th{background:#f5f7fa;padding:7px 8px;text-align:left;font-size:10px;color:var(--text-light);text-transform:uppercase;position:sticky;top:0;}
 .fix-table td{padding:7px 8px;border-bottom:1px solid #f0f2f5;vertical-align:top;}
@@ -293,6 +309,16 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
 .upload-bukti-btn{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:4px 8px;background:#e8f4fd;border:1px dashed #2563a8;border-radius:5px;color:var(--primary-light);font-size:10px;font-weight:600;cursor:pointer;transition:.15s;white-space:nowrap;}
 .upload-bukti-btn:hover{background:#d0eafa;border-style:solid;}
 .upload-bukti-btn.has-file{background:#e8f8ef;border-color:var(--lunas);color:var(--lunas);}
+.upload-bukti-btn.mini{padding:3px 5px;margin-left:4px;}
+.bukti-td{white-space:nowrap;}
+.bukti-td .img-thumb{margin-left:4px;vertical-align:middle;}
+.bukti-st{display:inline-block;font-size:10.5px;font-weight:800;border-radius:9px;padding:1px 6px;vertical-align:middle;}
+.bukti-st.ok{background:#e8f8ef;color:var(--lunas);}
+.bukti-st.up{background:#eef4fb;color:var(--primary-light);}
+.bukti-none{display:inline-block;margin-left:5px;font-size:10px;color:#c62828;vertical-align:middle;}
+.bukti-view,.bukti-send{border:1px solid var(--border);background:#fff;border-radius:6px;padding:3px 7px;font-size:10.5px;font-weight:700;cursor:pointer;color:var(--primary);margin-left:4px;}
+.bukti-send{border-color:#f3d48a;background:#fff8e6;color:#8a5a00;}
+.pay-chip.no-proof{background:#fff4e5;color:#b45309;}
 .img-thumb{width:28px;height:28px;object-fit:cover;border-radius:3px;cursor:pointer;border:1px solid var(--border);transition:.15s;}
 .img-thumb:hover{border-color:var(--primary-light);transform:scale(1.1);}
 
@@ -449,6 +475,7 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
       <div class="side-children">
         <button class="btn-sidebar side-child" onclick="openBooking()">🧾 Booking Nomor Invoice</button>
         <button class="btn-sidebar side-child" onclick="openFixPpn()">🛠️ Perbaiki PPN Manual</button>
+        <button class="btn-sidebar side-child" onclick="openStatusCheck()">🔎 Cek Status &amp; A/R</button>
         <button class="btn-sidebar side-child" onclick="openImportModal()">📥 Import dari Excel</button>
       </div>
     </div>
@@ -676,6 +703,17 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
     </div>
   </div>
 </div>
+<div class="modal-overlay" id="modal-stcheck">
+  <div class="modal" style="max-width:1100px">
+    <div class="modal-header"><h3>🔎 Cek Status &amp; A/R</h3><button class="modal-close" onclick="closeModal('modal-stcheck')">×</button></div>
+    <div class="modal-body" id="stcheck-body"></div>
+    <div class="modal-footer">
+      <span id="stcheck-count" style="margin-right:auto;font-size:12px;color:var(--text-light)"></span>
+      <button class="btn btn-outline" onclick="closeModal('modal-stcheck')">Tutup</button>
+      <button class="btn btn-primary" id="stcheck-btn" onclick="requireAuth(applyStatusCheck_)">🔎 Proses yang Dicentang</button>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-invlist">
   <div class="modal modal-md">
     <div class="modal-header"><h3>🧾 Daftar No Invoice</h3><button class="modal-close" onclick="closeModal('modal-invlist')">×</button></div>
@@ -716,8 +754,8 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
         <div class="form-group"><label id="m-ppn-label">PPN (Rp)</label><input type="number" id="m-ppn" placeholder="0" oninput="calcMesinTotal()"></div>
         <div class="form-group"><label>Discount (Rp)</label><input type="number" id="m-discount" placeholder="0" min="0" oninput="calcMesinTotal()"></div>
         <div class="form-group"><label>TOTAL (Rp) — DPP − Discount + PPN</label><input type="number" id="m-total" readonly style="background:#f5f7fa"><small class="field-hint" id="m-total-hint"></small></div>
-        <div class="form-group"><label>Status</label>
-          <select id="m-status" onchange="calcArAuto_('mesin')"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select>
+        <div class="form-group"><label>Status — Otomatis</label>
+          <select id="m-status" disabled style="background:#f5f7fa" title="Otomatis LUNAS kalau pembayaran yang sudah ada buktinya menutup Total"><option value="BELUM">BELUM LUNAS</option><option value="LUNAS">LUNAS</option></select>
         </div>
         <div class="form-group"><label>Tanggal Lunas</label><input type="date" id="m-tgl-lunas"></div>
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="m-tgl-kirim"></div>
@@ -778,7 +816,7 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
         <div class="form-group"><label id="s-ppn-label">PPN (Rp)</label><input type="number" id="s-ppn" placeholder="0" oninput="calcSpareTotal()"></div>
         <div class="form-group"><label>Discount (Rp)</label><input type="number" id="s-discount" placeholder="0" min="0" oninput="calcSpareTotal()"></div>
         <div class="form-group"><label>TOTAL (Rp) — DPP − Discount + PPN</label><input type="number" id="s-total" readonly style="background:#f5f7fa"><small class="field-hint" id="s-total-hint"></small></div>
-        <div class="form-group"><label>Status</label><select id="s-status" onchange="calcArAuto_('spare')"><option value="BELUM">BELUM LUNAS</option><option value="PROGRESS">PROGRESS</option><option value="LUNAS">LUNAS</option></select></div>
+        <div class="form-group"><label>Status — Otomatis</label><select id="s-status" disabled style="background:#f5f7fa" title="Otomatis LUNAS kalau pembayaran yang sudah ada buktinya menutup Total"><option value="BELUM">BELUM LUNAS</option><option value="LUNAS">LUNAS</option></select></div>
         <div class="form-group"><label>Tanggal Lunas</label><input type="date" id="s-jadwal-pay"></div>
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="s-tgl-kirim"></div>
         <div class="form-group"><label>Tanggal Pasang</label><input type="date" id="s-tgl-pasang"></div>
@@ -984,14 +1022,14 @@ function setSyncStatus(text){
 // ter-tulis di URL (browser history / server access log).
 // Code.gs yang terpasang (deployment /exec) masih versi lama -> Booking Nomor Invoice,
 // NPWP, dll. TIDAK ikut tersimpan ke Sheets. Tampilkan peringatan supaya kelihatan.
-const API_VERSION_NEEDED=3;
+const API_VERSION_NEEDED=4;
 let oldServerWarned_=false;
 function warnOldServer_(result){
   if(result && Number(result.apiVersion)>=API_VERSION_NEEDED) return false;
-  setSyncStatus(`⚠️ Code.gs di Apps Script belum versi terbaru — Booking Invoice & NPWP belum tersimpan ke Sheets (link …${WEB_APP_URL.slice(-11,-5)}, versi server: ${result&&result.apiVersion?result.apiVersion:'lama'})`);
+  setSyncStatus(`⚠️ Code.gs di Apps Script belum versi terbaru — Bukti bayar, Booking Invoice & NPWP belum tersimpan ke Sheets (link …${WEB_APP_URL.slice(-11,-5)}, versi server: ${result&&result.apiVersion?result.apiVersion:'lama'})`);
   if(!oldServerWarned_){
     oldServerWarned_=true;
-    toast('Code.gs di Apps Script belum versi terbaru. Deploy > Manage deployments > pensil > New version > Deploy. Sampai itu dilakukan, Booking Invoice & NPWP hanya tersimpan di perangkat ini.','error');
+    toast('Code.gs di Apps Script belum versi terbaru. Deploy > Manage deployments > pensil > New version > Deploy. Sampai itu dilakukan, upload bukti bayar belum bisa, dan Booking Invoice & NPWP hanya tersimpan di perangkat ini.','error');
   }
   return true;
 }
@@ -1044,22 +1082,26 @@ function payHasDP_(list){ return !!(list&&list[0]&&list[0].label==='DP'); }
 function payLabel_(i,hasDP){ return hasDP ? (i===0?'DP':'Pembayaran '+i) : 'Pembayaran '+(i+1); }
 function labelPayments_(list){
   const dp=payHasDP_(list);
-  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',fp:!!p.fp,tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||''}));
+  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',fp:!!p.fp,tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||'',...(p.buktiId?{buktiId:p.buktiId,buktiUrl:p.buktiUrl||''}:{})}));
 }
 // A/R = Total − (semua pembayaran + PPh Jasa + Biaya Admin), dihitung kalau History Pembayaran
 // sudah berisi angka. Status otomatis LUNAS kalau sudah tertutup penuh.
 // allowDowngrade=true: status LUNAS yang ternyata masih kurang diturunkan ke BELUM LUNAS.
+// ATURAN: pembayaran baru dihitung (mengurangi A/R) kalau BUKTI-nya sudah ter-upload ke Google Drive.
+function payVerified_(p){ return !!(p&&p.buktiId); }
+function verifiedPaid_(pays){ return (pays||[]).reduce((a,p)=>a+(payVerified_(p)?(Number(p.jumlah)||0):0),0); }
 function settledOf_(r){
-  return (r.payments||[]).reduce((a,p)=>a+(Number(p.jumlah)||0),0)+(Number(r.pph)||0)+(Number(r.admin)||0);
+  return verifiedPaid_(r.payments)+(Number(r.pph)||0)+(Number(r.admin)||0);
 }
 function hasPayAmount_(r){ return (r.payments||[]).some(p=>(Number(p.jumlah)||0)!==0); }
-function syncArStatus_(r, allowDowngrade){
-  if(!hasPayAmount_(r)) return false;
-  const before=r.ar+'|'+r.status;
+// Status hanya LUNAS / BELUM: LUNAS kalau Total sudah tertutup oleh pembayaran ber-bukti + PPh + Biaya Admin.
+function arStatusOf_(r){
   const sisa=Math.round(((Number(r.total)||0)-settledOf_(r))*100)/100;
-  r.ar=sisa;
-  if(sisa<1) r.status='LUNAS';
-  else if(allowDowngrade && r.status==='LUNAS') r.status='BELUM';
+  return {ar:sisa, status:sisa<1?'LUNAS':'BELUM'};
+}
+function syncArStatus_(r){
+  const before=r.ar+'|'+r.status;
+  const x=arStatusOf_(r); r.ar=x.ar; r.status=x.status;
   return before!==(r.ar+'|'+r.status);
 }
 function syncAllArStatus_(){
@@ -1074,39 +1116,19 @@ function calcArAuto_(prefix){
   const arEl=g('ar'), stEl=g('status'), hint=document.getElementById((prefix==='mesin'?'m':'s')+'-ar-hint');
   if(!arEl||!hint) return;
   const rows=(typeof payRows!=='undefined'&&currentPayPrefix===prefix)?payRows:[];
-  const paid=rows.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
-  const anyPay=rows.some(p=>(Number(p.jumlah)||0)!==0);
+  const paid=verifiedPaid_(rows);
+  const noProof=rows.filter(p=>!payVerified_(p)&&(Number(p.jumlah)||0)!==0);
+  const noProofSum=noProof.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
   const total=Number(g('total').value)||0;
-  if(!anyPay){
-    // Belum ada History Pembayaran: A/R tetap otomatis.
-    // BELUM LUNAS / PROGRESS -> A/R = Total − PPh − Biaya Admin; LUNAS -> A/R 0.
-    const pph0=Number(g('pph').value)||0, adm0=Number(g('admin').value)||0;
-    arEl.readOnly=true; arEl.style.background='#f5f7fa';
-    if(stEl && stEl.value==='LUNAS'){
-      arEl.value=0;
-      hint.className='ar-hint ok';
-      hint.textContent='✅ Lunas (status dipilih manual, belum ada History Pembayaran). Sebaiknya isi History Pembayaran supaya tercatat.';
-    } else {
-      const sisa0=Math.round((total-pph0-adm0)*100)/100;
-      arEl.value=sisa0;
-      hint.className='ar-hint kurang';
-      hint.textContent=`Belum ada pembayaran — A/R = Total ${fmt(total)}${pph0?` − PPh ${fmt(pph0)}`:''}${adm0?` − Biaya Admin ${fmt(adm0)}`:''}. Isi History Pembayaran begitu ada pembayaran masuk.`;
-      // A/R lama yang dulu diisi manual (beda dengan hitungan) -> ingatkan sebelum tersimpan
-      const old=editingId?((prefix==='mesin'?db.mesin:db.spare).find(x=>x.id===editingId)):null;
-      if(old && !hasPayAmount_(old) && Math.abs((Number(old.ar)||0)-sisa0)>=1){
-        hint.className='ar-hint lebih';
-        hint.textContent+=` ⚠️ Sebelumnya A/R tersimpan ${fmt(Number(old.ar)||0)} (diisi manual). Kalau sebagian sudah dibayar, catat dulu di History Pembayaran sebelum Simpan supaya A/R tetap benar.`;
-      }
-    }
-    return;
-  }
   const pph=Number(g('pph').value)||0, adm=Number(g('admin').value)||0;
   const sisa=Math.round((total-paid-pph-adm)*100)/100;
   arEl.value=sisa; arEl.readOnly=true; arEl.style.background='#f5f7fa';
-  const rinci=`Total ${fmt(total)} − dibayar ${fmt(paid)}${pph?` − PPh ${fmt(pph)}`:''}${adm?` − Biaya Admin ${fmt(adm)}`:''}`;
-  if(Math.abs(sisa)<1){ hint.className='ar-hint ok'; hint.textContent=`✅ Lunas. ${rinci}.`; if(stEl) stEl.value='LUNAS'; }
-  else if(sisa>0){ hint.className='ar-hint kurang'; hint.textContent=`Kurang ${fmt(sisa)}. ${rinci}.`; if(stEl&&stEl.value==='LUNAS') stEl.value='BELUM'; }
-  else { hint.className='ar-hint lebih'; hint.textContent=`⚠️ Lebih bayar ${fmt(-sisa)}. ${rinci}.`; if(stEl) stEl.value='LUNAS'; }
+  if(stEl) stEl.value=sisa<1?'LUNAS':'BELUM';
+  const rinci=`Total ${fmt(total)} − dibayar (ber-bukti) ${fmt(paid)}${pph?` − PPh ${fmt(pph)}`:''}${adm?` − Biaya Admin ${fmt(adm)}`:''}`;
+  const warn=noProof.length?` ⚠️ ${noProof.length} pembayaran (${fmt(noProofSum)}) belum dihitung karena buktinya belum di-upload.`:'';
+  if(Math.abs(sisa)<1){ hint.className='ar-hint ok'; hint.textContent=`✅ Lunas. ${rinci}.${warn}`; }
+  else if(sisa>0){ hint.className=noProof.length?'ar-hint lebih':'ar-hint kurang'; hint.textContent=`Kurang ${fmt(sisa)}. ${rinci}.${warn}`; }
+  else { hint.className='ar-hint lebih'; hint.textContent=`⚠️ Lebih bayar ${fmt(-sisa)}. ${rinci}.${warn}`; }
 }
 
 function labelAllPayments_(){
@@ -1383,6 +1405,82 @@ function selectCity(city){
 // ═══════════════════════════════════════════════════════
 // Done Payment = yang sudah dibayar customer (termasuk PPh Jasa & Biaya Admin) = Total − A/R
 function doneOf_(r){ return Math.round(((Number(r.total)||0)-(Number(r.ar)||0))*100)/100; }
+// ═══════════════════════════════════════════════════════
+// DASHBOARD: PERBANDINGAN LUNAS PER TAHUN
+// Tahun lunas = tanggal pembayaran ber-bukti yang paling akhir (bukan kolom Tanggal Lunas).
+// Yang belum lunas tetap menjadi tanggungan A/R.
+// ═══════════════════════════════════════════════════════
+function lunasDateOf_(r){
+  const ds=(r.payments||[]).filter(payVerified_).map(p=>String(p.tgl||'')).filter(t=>/^\d{4}-\d{2}-\d{2}/.test(t)).sort();
+  return ds.length?ds[ds.length-1]:'';
+}
+function lunasYearStats_(records){
+  const byYear={}, noDate=[], belum=[];
+  records.forEach(r=>{
+    if(r.status==='LUNAS'){
+      const d=lunasDateOf_(r);
+      if(!d){ noDate.push(r); return; }
+      const y=Number(d.slice(0,4));
+      (byYear[y]=byYear[y]||{n:0,val:0,cust:new Set(),list:[]});
+      byYear[y].n++; byYear[y].val+=Number(r.total)||0; byYear[y].cust.add(String(r.customer||'').trim().toLowerCase()); byYear[y].list.push(r);
+    } else belum.push(r);
+  });
+  return {byYear,noDate,belum};
+}
+let lunasDetailSets_={};
+function lunasYearCard_(records,scope){
+  const st=lunasYearStats_(records);
+  const years=[...new Set([2025,2026,...Object.keys(st.byYear).map(Number)])].sort((a,b)=>a-b);
+  lunasDetailSets_[scope]={...Object.fromEntries(years.map(y=>[y,(st.byYear[y]||{list:[]}).list])), belum:st.belum, nodate:st.noDate};
+  const fmtS=v=>{ v=Number(v)||0; return v>=1e9?'Rp '+(v/1e9).toLocaleString('id-ID',{maximumFractionDigits:2})+' M':v>=1e6?'Rp '+(v/1e6).toLocaleString('id-ID',{maximumFractionDigits:1})+' jt':fmt(v); };
+  const tile=(y,i)=>{
+    const d=st.byYear[y]||{n:0,val:0,cust:new Set()};
+    const prev=i>0?(st.byYear[years[i-1]]||{n:0}).n:null;
+    const delta=(prev!==null&&prev>0)?Math.round((d.n-prev)/prev*100):null;
+    return `<div class="ly-tile ok">
+      <div class="ly-head">LUNAS ${y}${delta!==null?`<span class="ly-delta ${delta>=0?'up':'down'}">${delta>=0?'▲':'▼'} ${Math.abs(delta)}%</span>`:''}</div>
+      <div class="ly-big">${d.n}<small> transaksi</small></div>
+      <div class="ly-row"><span>Customer</span><b>${d.cust.size}</b></div>
+      <div class="ly-row"><span>Nilai lunas</span><b title="${fmt(d.val)}">${fmtS(d.val)}</b></div>
+      <button class="ly-btn" onclick="showLunasDetail_('${scope}','${y}')" ${d.n?'':'disabled'}>Lihat detail</button>
+    </div>`;
+  };
+  const arSum=st.belum.reduce((a,r)=>a+(Number(r.ar)||0),0);
+  return `<div class="dash-card"><h3>📊 Perbandingan Pelunasan per Tahun</h3>
+    <div class="ly-grid">${years.map(tile).join('')}
+      <div class="ly-tile bad">
+        <div class="ly-head">BELUM LUNAS (A/R)</div>
+        <div class="ly-big">${st.belum.length}<small> transaksi</small></div>
+        <div class="ly-row"><span>Customer</span><b>${new Set(st.belum.map(r=>String(r.customer||'').trim().toLowerCase())).size}</b></div>
+        <div class="ly-row"><span>Sisa tagihan</span><b title="${fmt(arSum)}">${fmtS(arSum)}</b></div>
+        <button class="ly-btn" onclick="showLunasDetail_('${scope}','belum')" ${st.belum.length?'':'disabled'}>Lihat detail</button>
+      </div>
+    </div>
+    ${st.noDate.length?`<p class="ly-note">⚠️ ${st.noDate.length} transaksi berstatus LUNAS tapi belum ada pembayaran ber-bukti, jadi tidak masuk tahun mana pun. <a onclick="showLunasDetail_('${scope}','nodate')">Lihat</a> · jalankan Alat Bantu › Cek Status &amp; A/R.</p>`:''}
+    <p class="ly-note">Tahun lunas = tanggal pembayaran terakhir yang buktinya sudah di-upload.</p>
+  </div>`;
+}
+function showLunasDetail_(scope,key){
+  const list=((lunasDetailSets_[scope]||{})[key]||[]).slice();
+  const isBelum=key==='belum';
+  const sName=id=>{const s=db.sales.find(x=>x.id===id);return s?s.nama:'-';};
+  list.sort((a,b)=>isBelum?(Number(b.ar)||0)-(Number(a.ar)||0):String(lunasDateOf_(a)).localeCompare(String(lunasDateOf_(b))));
+  const title=isBelum?'Belum Lunas (A/R)':key==='nodate'?'LUNAS tanpa pembayaran ber-bukti':'LUNAS '+key;
+  const tot=list.reduce((a,r)=>a+(Number(isBelum?r.ar:r.total)||0),0);
+  let h=`<p class="text-sm" style="margin-bottom:10px"><b>${title}</b> — ${list.length} transaksi · ${isBelum?'sisa tagihan':'nilai'} ${fmt(tot)}</p>
+    <div class="fix-wrap"><table class="fix-table"><thead><tr><th>Customer</th><th>Barang</th><th>Sales</th><th style="text-align:right">Total</th><th style="text-align:right">${isBelum?'A/R':'Dibayar'}</th><th>${isBelum?'Bayar terakhir':'Tanggal lunas'}</th></tr></thead><tbody>`;
+  list.forEach(r=>{
+    const last=isBelum?((r.payments||[]).map(p=>p.tgl).filter(Boolean).sort().pop()||''):lunasDateOf_(r);
+    h+=`<tr><td><b>${escAttr_(r.customer)||'-'}</b></td><td>${escAttr_(r.barang)||'-'}</td><td>${escAttr_(sName(r.salesId))}</td>
+      <td class="num">${fmt(Number(r.total)||0)}</td><td class="num">${fmt(isBelum?(Number(r.ar)||0):verifiedPaid_(r.payments))}</td><td>${fmtDate(last)}</td></tr>`;
+  });
+  h+=`</tbody></table></div>`;
+  document.getElementById('invlist-body').innerHTML=h;
+  document.querySelector('#modal-invlist .modal-header h3').textContent='📊 '+title;
+  document.querySelector('#modal-invlist .modal').style.maxWidth='980px';
+  openModal('modal-invlist');
+}
+
 function showDashboard(){
   currentSalesId=null; renderSidebar(); closeSidebarMobile();
   const mc=document.getElementById('main-content');
@@ -1406,14 +1504,10 @@ function showDashboard(){
       <div class="summary-card"><div class="label">Total Nilai Penjualan</div><div class="value" style="font-size:15px">${fmt(totalVal)}</div><div class="sub">${totalAll} transaksi</div></div>
       <div class="summary-card danger"><div class="label">Total A/R Tertunggak</div><div class="value" style="font-size:15px">${fmt(totalAR)}</div><div class="sub">${totalBelum} transaksi belum</div></div>
       <div class="summary-card success"><div class="label">Sudah Lunas</div><div class="value">${totalLunas}</div><div class="sub">${pct(totalLunas,totalAll)}% dari total</div></div>
-      <div class="summary-card"><div class="label">Dalam Progress</div><div class="value" style="color:var(--progress)">${totalProg}</div><div class="sub">transaksi</div></div>
+      <div class="summary-card success"><div class="label">Lunas ${new Date().getFullYear()}</div><div class="value">${lunasYearStats_([...allM,...allS]).byYear[new Date().getFullYear()]?.n||0}</div><div class="sub">transaksi lunas tahun ini</div></div>
     </div>
     <div class="dash-grid">
-      <div class="dash-card"><h3>📊 Status Pembayaran</h3><div class="pie-wrap">${pie}<div class="pie-legend">
-        <div class="pie-item"><div class="pie-dot" style="background:#27ae60"></div><span>Lunas: <b>${totalLunas}</b> (${pLunas}%)</span></div>
-        <div class="pie-item"><div class="pie-dot" style="background:#f39c12"></div><span>Progress: <b>${totalProg}</b> (${pProg}%)</span></div>
-        <div class="pie-item"><div class="pie-dot" style="background:#e74c3c"></div><span>Belum: <b>${totalBelum}</b> (${pBelum}%)</span></div>
-      </div></div></div>
+      ${lunasYearCard_([...allM,...allS],'all')}
       <div class="dash-card"><h3>👤 AR per Sales</h3><table class="ar-table">
         <thead><tr><th>Sales</th><th>Lokasi</th><th>A/R</th><th>% Lunas</th></tr></thead>
         <tbody>${salesRows.map(r=>`<tr>
@@ -1509,11 +1603,7 @@ function renderDashTab(tc){
     <div class="summary-card success"><div class="label">Sudah Lunas</div><div class="value">${L}</div><div class="sub">${pct(L,allRec.length)}%</div></div>
   </div>
   <div class="dash-grid">
-    <div class="dash-card"><h3>📊 Status Pembayaran</h3><div class="pie-wrap">${pie}<div class="pie-legend">
-      <div class="pie-item"><div class="pie-dot" style="background:#27ae60"></div><span>Lunas: <b>${L}</b></span></div>
-      <div class="pie-item"><div class="pie-dot" style="background:#f39c12"></div><span>Progress: <b>${P}</b></span></div>
-      <div class="pie-item"><div class="pie-dot" style="background:#e74c3c"></div><span>Belum: <b>${B}</b></span></div>
-    </div></div></div>
+    ${lunasYearCard_(allRec,'sales')}
     <div class="dash-card"><h3>💰 Ringkasan Nilai</h3><table class="ar-table">
       <thead><tr><th>Kategori</th><th>Transaksi</th><th>Total Nilai</th><th>Done Payment</th><th>A/R</th></tr></thead>
       <tbody>
@@ -1551,10 +1641,9 @@ function fpBadge_(r){
 async function renderPayChips(payments, id, type){
   if(!payments||!payments.length) return '<span class="text-sm">-</span>';
   let html='';
-  for(const [i,p] of payments.entries()){
-    const imgKey=`${type}_${id}_pay_${i}`;
-    const hasImg=!!(await loadImage(imgKey).catch(()=>null));
-    html+=`<span class="pay-chip ${hasImg?'has-img':''}" onclick="showPayDetail('${id}','${type}')" title="${hasImg?'Ada bukti pembayaran':'Klik lihat detail'}">${fmt(p.jumlah)}${hasImg?' 📷':''}</span>`;
+  for(const p of payments){
+    const ok=payVerified_(p);
+    html+=`<span class="pay-chip ${ok?'has-img':'no-proof'}" onclick="showPayDetail('${id}','${type}')" title="${ok?'Bukti sudah di-upload':'Belum ada bukti — belum mengurangi A/R'}">${fmt(p.jumlah)} ${ok?'📷':'⚠️'}</span>`;
   }
   return html;
 }
@@ -1617,6 +1706,8 @@ function showInvoiceList(id,type){
   });
   h+=`</tbody></table>`;
   document.getElementById('invlist-body').innerHTML=h;
+  document.querySelector('#modal-invlist .modal-header h3').textContent='🧾 Daftar No Invoice';
+  document.querySelector('#modal-invlist .modal').style.maxWidth='';
   openModal('modal-invlist');
 }
 
@@ -1659,8 +1750,7 @@ function overdueList_(){
   const out=[];
   [['mesin',db.mesin],['spare',db.spare]].forEach(([type,arr])=>(arr||[]).forEach(r=>{
     const pays=r.payments||[];
-    const paid=pays.reduce((a,p)=>a+(Number(p.jumlah)||0),0);
-    const sisaHitung=(Number(r.total)||0)-paid-(Number(r.pph)||0)-(Number(r.admin)||0);
+    const sisaHitung=(Number(r.total)||0)-settledOf_(r);
     // Sisa yang masih harus dibayar; transaksi yang sisanya 0 tidak ditampilkan
     const sisa = sisaHitung>=1 ? sisaHitung : (r.status!=='LUNAS' ? (Number(r.ar)||0) : 0);
     const belumLunas = sisa>=1 && (r.status!=='LUNAS' || pays.length>0);
@@ -1911,11 +2001,9 @@ async function showPayDetail(id,type){
     <table class="pay-list"><thead><tr><th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Note</th><th>Bukti</th></tr></thead><tbody>`;
   if(r.payments&&r.payments.length){
     for(const [i,p] of r.payments.entries()){
-      const imgKey=`${type}_${id}_pay_${i}`;
-      const imgData=await loadImage(imgKey).catch(()=>null);
-      const buktiHtml=imgData
-        ?`<img src="${imgData}" class="img-thumb" onclick="openLightbox('${imgKey}')" title="Klik untuk perbesar">`
-        :`<span style="color:#ccc;font-size:10px">-</span>`;
+      const buktiHtml=payVerified_(p)
+        ?`<button class="bukti-view" onclick="viewBukti_('${p.buktiId}')">📷 Lihat</button>`
+        :`<span class="bukti-none">Belum ada bukti</span>`;
       h+=`<tr><td class="pay-label">${payLabel_(i,payHasDP_(r.payments))}</td><td>${escAttr_(p.noInv)||'-'}</td><td class="fp-td">${p.fp?'<b style="color:var(--lunas)">✓</b>':'<span style="color:#c62828">✗</span>'}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td>${buktiHtml}</td></tr>`;
     }
   } else h+=`<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Belum ada history</td></tr>`;
@@ -2126,6 +2214,143 @@ async function applyFixPpn_(){
   openFixPpn();
 }
 
+// ═══════════════════════════════════════════════════════
+// BUKTI PEMBAYARAN -> Google Drive (lewat Code.gs)
+// Gambar otomatis dikecilkan (≤ ±400 KB) di browser, lalu langsung di-upload.
+// ═══════════════════════════════════════════════════════
+const BUKTI_MAX_BYTES=400*1024;
+async function apiPost_(action,payload){
+  const res=await fetch(WEB_APP_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,auth:appAuth,payload})});
+  const j=await res.json();
+  if(j.code==='AUTH'){ forceReLogin_(); throw new Error('Sesi login berakhir'); }
+  if(j.status!=='success') throw new Error(j.message||'Gagal');
+  return j;
+}
+function loadImgEl_(src){ return new Promise((ok,no)=>{ const im=new Image(); im.onload=()=>ok(im); im.onerror=()=>no(new Error('Gambar tidak bisa dibaca (gunakan JPG/PNG)')); im.src=src; }); }
+function fileToDataUrl_(file){ return new Promise((ok,no)=>{ const r=new FileReader(); r.onload=e=>ok(e.target.result); r.onerror=()=>no(new Error('Gagal membaca file')); r.readAsDataURL(file); }); }
+function b64Bytes_(dataUrl){ const b=String(dataUrl).split(',')[1]||''; return Math.floor(b.length*3/4); }
+// Kecilkan gambar: sisi terpanjang ≤ 1600 px, JPG, kualitas turun bertahap sampai ≤ 400 KB
+async function compressImage_(src, origType){
+  if(/^data:image\/(jpeg|png|webp)/.test(src) && b64Bytes_(src)<=BUKTI_MAX_BYTES) return src;   // sudah kecil
+  const im=await loadImgEl_(src);
+  let w=im.naturalWidth, h=im.naturalHeight, scale=Math.min(1,1600/Math.max(w,h));
+  for(let round=0; round<6; round++){
+    const cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
+    const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+    const ctx=c.getContext('2d'); ctx.fillStyle='#fff'; ctx.fillRect(0,0,cw,ch); ctx.drawImage(im,0,0,cw,ch);
+    for(const q of [0.85,0.75,0.65,0.55,0.45]){
+      const out=c.toDataURL('image/jpeg',q);
+      if(b64Bytes_(out)<=BUKTI_MAX_BYTES) return out;
+    }
+    scale*=0.8;
+  }
+  return document.createElement('canvas').toDataURL('image/jpeg',0.4);
+}
+async function uploadBuktiRow_(row,prefix,src){
+  const px=prefix==='mesin'?'m':'s';
+  row._uploading=true; renderPayRows(prefix);
+  try{
+    const small=await compressImage_(src);
+    row._imgPreview=small; row._imgData=small; row._hasImg=true; renderPayRows(prefix);
+    const cust=(document.getElementById(px+'-customer').value||'customer').trim();
+    const idx=payRows.indexOf(row);
+    const name=`${cust}_${idx>=0?payLabel_(idx,payHasDP_(payRows)):'Pembayaran'}_${row.tgl||new Date().toISOString().slice(0,10)}.jpg`.replace(/[^\w.\- ]+/g,'_');
+    const j=await apiPost_('uploadBukti',{name,mime:'image/jpeg',data:small.split(',')[1],desc:`${cust} — ${fmt(row.jumlah)} — ${row.tgl||''}`});
+    row.buktiId=j.id; row.buktiUrl=j.url;
+    await saveImage('drive_'+j.id, small).catch(()=>{});
+    toast(`Bukti ter-upload (${Math.round(b64Bytes_(small)/1024)} KB)`);
+  }catch(e){
+    toast('Gagal upload bukti: '+(e&&e.message?e.message:e),'error');
+  }finally{
+    row._uploading=false;
+    if(currentPayPrefix===prefix) renderPayRows(prefix);
+  }
+}
+async function handleBuktiUpload(idx,input,prefix){
+  const file=input.files[0]; input.value=''; if(!file) return;
+  if(!/^image\//.test(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)){ toast('Bukti harus berupa gambar (JPG/PNG). PDF belum bisa — screenshot dulu.','error'); return; }
+  if(file.size>25*1024*1024){ toast('Ukuran file maksimal 25 MB','error'); return; }
+  const row=payRows[idx]; if(!row) return;
+  try{ await uploadBuktiRow_(row,prefix,await fileToDataUrl_(file)); }
+  catch(e){ toast(e.message,'error'); }
+}
+// Foto bukti lama yang dulu hanya tersimpan di browser ini -> kirim ke Google Drive
+function sendLocalBukti_(idx,prefix){ const row=payRows[idx]; if(row&&row._imgPreview) uploadBuktiRow_(row,prefix,row._imgPreview); }
+async function viewBukti_(id){
+  if(!id) return;
+  let src=await loadImage('drive_'+id).catch(()=>null);
+  if(!src){
+    toast('Mengambil bukti dari Google Drive...','info');
+    try{ const j=await apiPost_('getBukti',{id}); src=`data:${j.mime||'image/jpeg'};base64,${j.data}`; await saveImage('drive_'+id,src).catch(()=>{}); }
+    catch(e){ toast('Gagal mengambil bukti: '+e.message,'error'); return; }
+  }
+  openLightboxSrc(src);
+}
+function buktiCell_(p,i,prefix){
+  const input=`<input type="file" id="bukti-file-${i}" accept="image/*" style="display:none" onchange="handleBuktiUpload(${i},this,'${prefix}')">`;
+  if(p._uploading) return `<td class="bukti-td"><span class="bukti-st up">⏳ Upload…</span></td>`;
+  if(payVerified_(p)){
+    const thumb=p._imgPreview?`<img src="${p._imgPreview}" class="img-thumb" onclick="openLightboxSrc(this.src)" title="Klik perbesar">`:`<button class="bukti-view" onclick="viewBukti_('${p.buktiId}')">📷 Lihat</button>`;
+    return `<td class="bukti-td"><span class="bukti-st ok" title="Tersimpan di Google Drive">✓</span>${thumb}<label class="upload-bukti-btn mini" for="bukti-file-${i}" title="Ganti bukti">${UPLOAD_ICON_}</label>${input}</td>`;
+  }
+  if(p._imgPreview) return `<td class="bukti-td"><img src="${p._imgPreview}" class="img-thumb" onclick="openLightboxSrc(this.src)" title="Foto lama, hanya ada di browser ini"><button class="bukti-send" onclick="sendLocalBukti_(${i},'${prefix}')" title="Foto ini baru tersimpan di browser ini. Klik untuk upload ke Google Drive">☁ Kirim</button></td>`;
+  return `<td class="bukti-td"><label class="upload-bukti-btn" for="bukti-file-${i}" title="Upload bukti pembayaran (otomatis dikecilkan)">${UPLOAD_ICON_}</label>${input}<span class="bukti-none">belum ada</span></td>`;
+}
+
+// ═══════════════════════════════════════════════════════
+// ALAT BANTU: CEK STATUS & A/R (aturan bukti bayar, tanpa PROGRESS)
+// ═══════════════════════════════════════════════════════
+let statusCands_=[];
+function statusMismatch_(){
+  const out=[];
+  [['mesin',db.mesin],['spare',db.spare]].forEach(([type,arr])=>(arr||[]).forEach(r=>{
+    const x=arStatusOf_(r);
+    if(r.status!==x.status || Math.abs((Number(r.ar)||0)-x.ar)>=1) out.push({type,r,x});
+  }));
+  return out;
+}
+function openStatusCheck(){
+  closeSidebarMobile();
+  statusCands_=statusMismatch_();
+  const sName=id=>{const s=db.sales.find(x=>x.id===id);return s?s.nama:'-';};
+  const st=s=>`<span class="status-badge ${statusClass(s)}">${statusLabel(s)}</span>`;
+  let h=`<p class="text-sm" style="margin-bottom:10px">Aturan baru: <b>status hanya LUNAS / BELUM LUNAS</b> (PROGRESS dihapus), dan <b>A/R hanya berkurang oleh pembayaran yang buktinya sudah di-upload</b>. Daftar di bawah adalah transaksi yang status/A/R-nya akan berubah. Centang lalu klik Proses. Sebelum diproses, file Backup otomatis terunduh.</p>`;
+  if(!statusCands_.length) h+=`<div style="padding:18px;text-align:center;color:var(--lunas);font-weight:700">✅ Semua transaksi sudah sesuai aturan.</div>`;
+  else{
+    h+=`<div class="fix-wrap"><table class="fix-table"><thead><tr><th><input type="checkbox" onchange="document.querySelectorAll('.st-cb').forEach(c=>c.checked=this.checked);statusCount_()"></th><th>Customer</th><th>Sales · Jenis</th><th style="text-align:right">Total</th><th style="text-align:right">Dibayar (ber-bukti)</th><th>Status</th><th style="text-align:right">A/R</th></tr></thead><tbody>`;
+    statusCands_.forEach((c,i)=>{
+      const r=c.r, nb=(r.payments||[]).filter(p=>!payVerified_(p)).length;
+      h+=`<tr><td><input type="checkbox" class="st-cb" data-i="${i}" onchange="statusCount_()"></td>
+        <td><b>${escAttr_(r.customer)||'-'}</b><span class="text-sm" style="display:block">${escAttr_(r.barang)||''}</span></td>
+        <td>${escAttr_(sName(r.salesId))}<span class="text-sm" style="display:block">${c.type==='mesin'?'Mesin':escAttr_(r.jenis||'Sparepart')}</span></td>
+        <td class="num">${fmt(Number(r.total)||0)}</td>
+        <td class="num">${fmt(verifiedPaid_(r.payments))}${nb?`<span class="text-sm" style="display:block;color:#b45309">${nb} pembayaran tanpa bukti</span>`:''}</td>
+        <td>${st(r.status)} → ${st(c.x.status)}</td>
+        <td class="num"><span class="old">${fmt(Number(r.ar)||0)}</span><span class="new">${fmt(c.x.ar)}</span></td></tr>`;
+    });
+    h+=`</tbody></table></div>`;
+  }
+  document.getElementById('stcheck-body').innerHTML=h;
+  statusCount_();
+  openModal('modal-stcheck');
+}
+function statusCount_(){
+  const n=document.querySelectorAll('.st-cb:checked').length, t=document.querySelectorAll('.st-cb').length;
+  document.getElementById('stcheck-count').textContent=`${n} dari ${t} transaksi dicentang`;
+  document.getElementById('stcheck-btn').disabled=!n;
+}
+async function applyStatusCheck_(){
+  const picks=[...document.querySelectorAll('.st-cb:checked')].map(c=>statusCands_[Number(c.dataset.i)]).filter(Boolean);
+  if(!picks.length) return;
+  if(!confirm(`Proses ${picks.length} transaksi?\nStatus & A/R akan mengikuti pembayaran yang sudah ada buktinya.\n\nFile Backup akan terunduh dulu sebagai cadangan.`)) return;
+  backupData();
+  picks.forEach(c=>syncArStatus_(c.r));
+  await saveData();
+  renderSidebar(); if(currentSalesId) renderMain(); else showDashboard();
+  toast(`${picks.length} transaksi disesuaikan`);
+  openStatusCheck();
+}
+
 function renderPayRows(prefix){
   currentPayPrefix=prefix;
   const id=prefix==='mesin'?'m-pay-list':'s-pay-list';
@@ -2144,13 +2369,7 @@ function renderPayRows(prefix){
       <td class="tax-col tax-val" id="paytax-dpp-${i}">${taxCell_(p.jumlah,'dpp')}</td><td class="tax-col tax-val" id="paytax-ppn-${i}">${taxCell_(p.jumlah,'ppn')}</td>
       <td><input type="text" value="${p.rek||''}" onchange="payRows[${i}].rek=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:72px"></td>
       <td><input type="text" value="${escAttr_(p.ket||'')}" placeholder="Note" onchange="payRows[${i}].ket=this.value" oninput="payRows[${i}].ket=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:96px"></td>
-      <td>
-        <label class="upload-bukti-btn ${hasImg?'has-file':''}" for="bukti-file-${i}" title="${hasImg?'Gambar tersimpan — klik untuk ganti':'Upload bukti pembayaran'}">
-          ${UPLOAD_ICON_}
-        </label>
-        <input type="file" id="bukti-file-${i}" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="handleBuktiUpload(${i},this,'${prefix}')">
-        ${p._imgPreview?`<img src="${p._imgPreview}" class="img-thumb" style="margin-left:4px" onclick="openLightboxSrc('${p._imgPreview}')" title="Klik perbesar">`:''}
-      </td>
+      ${buktiCell_(p,i,prefix)}
       <td><button onclick="removePayRow(${i},'${prefix}')" style="background:#fdecea;border:none;color:#e74c3c;padding:3px 7px;border-radius:4px;cursor:pointer;font-size:11px">✕</button></td>
     </tr>`;
   });
@@ -2206,18 +2425,7 @@ function choosePayType(type){
   payRows.push({label:type==='dp'?'DP':'Pembayaran 1',tgl:'',jumlah:0,rek:'',ket:'',_imgPreview:null,_hasImg:false});
   renderPayRows(pendingPayPrefix); pendingPayPrefix=null;
 }
-async function handleBuktiUpload(idx,input,prefix){
-  const file=input.files[0]; if(!file) return;
-  if(file.size>5*1024*1024){toast('Ukuran file maksimal 5MB','error');return;}
-  const reader=new FileReader();
-  reader.onload=e=>{
-    payRows[idx]._imgPreview=e.target.result;
-    payRows[idx]._imgData=e.target.result;
-    payRows[idx]._hasImg=true;
-    renderPayRows(prefix);
-  };
-  reader.readAsDataURL(file);
-}
+// (handleBuktiUpload lama dipindah: sekarang upload ke Google Drive, lihat bagian BUKTI PEMBAYARAN)
 
 // ═══════════════════════════════════════════════════════
 // DAFTAR BARANG (multi-item per transaksi) — Mesin & Spare/Jasa
@@ -2453,6 +2661,7 @@ async function editMesin(id){
   renderItemRows('mesin'); renderPayRows('mesin'); openModal('modal-mesin');
 }
 async function saveMesin(){
+  if(payRows.some(p=>p._uploading)){ toast('Tunggu sebentar, bukti pembayaran masih di-upload','error'); return; }
   if(!itemRows.length){ toast('Minimal isi 1 barang','error'); return; }
   for(const[i,it] of itemRows.entries()){
     if(!it.barang){ toast(`Nama barang pada baris ${i+1} belum diisi`,'error'); return; }
@@ -2557,6 +2766,7 @@ async function editSpare(id){
   renderItemRows('spare'); renderPayRows('spare');openModal('modal-spare');
 }
 async function saveSpare(){
+  if(payRows.some(p=>p._uploading)){ toast('Tunggu sebentar, bukti pembayaran masih di-upload','error'); return; }
   if(!itemRows.length){ toast('Minimal isi 1 barang','error'); return; }
   for(const[i,it] of itemRows.entries()){
     if(!it.barang){ toast(`Nama barang pada baris ${i+1} belum diisi`,'error'); return; }
@@ -3656,7 +3866,7 @@ function exportXLSX(){
       const r0=R;
       recs.forEach(r=>{
         // DONE PAYMENT = semua pembayaran + PPh Jasa + Biaya Admin (sama dengan perhitungan pelunasan di aplikasi)
-        const paid=(r.payments||[]).reduce((a,p)=>a+num(p.jumlah),0)+num(r.pph)+num(r.admin);
+        const paid=settledOf_(r);
         const harga=num(r.total);
         put(R,0,{t:'s',v:pic,s:sPic});
         put(R,1,{t:'s',v:r.customer||'-',s:sTxt});
@@ -3670,7 +3880,7 @@ function exportXLSX(){
         R++;
       });
       const g1=XLSX.utils.encode_cell({r:r0,c:6}), g2=XLSX.utils.encode_cell({r:R-1,c:6});
-      const totAR=recs.reduce((a,r)=>a+num(r.total)-(r.payments||[]).reduce((x,p)=>x+num(p.jumlah),0)-num(r.pph)-num(r.admin),0);
+      const totAR=recs.reduce((a,r)=>a+num(r.total)-settledOf_(r),0);
       put(R,0,{t:'s',v:pic,s:sPic});
       put(R,5,{t:'s',v:'Total AR '+pic,s:{font:{name:F,sz:10,bold:true},border:bd}});
       put(R,6,{t:'n',f:`SUM(${g1}:${g2})`,v:totAR,s:{...sNum,font:{name:F,sz:10,bold:true}}});
@@ -3714,7 +3924,7 @@ function exportXLSX(){
     ws['F5']={t:'n',v:totalAR,z:'"Rp "#,##0',s:{font:{bold:true,sz:11,color:{rgb:'E74C3C'},name:'Calibri'},alignment:{horizontal:'right'}}};
     ws['G5']={t:'s',v:'LUNAS',s:{...boldWhite,...fillColor(C.lunas)}};
     ws['H5']={t:'n',v:L,s:{font:{bold:true,sz:11,color:{rgb:C.lunas},name:'Calibri'},alignment:{horizontal:'center'}}};
-    ws['I5']={t:'s',v:'BELUM+PROGRESS',s:{...boldWhite,...fillColor(C.progress)}};
+    ws['I5']={t:'s',v:'BELUM LUNAS',s:{...boldWhite,...fillColor(C.progress)}};
     ws['J5']={t:'n',v:B+P,s:{font:{bold:true,sz:11,color:{rgb:C.progress},name:'Calibri'},alignment:{horizontal:'center'}}};
     const hdr=['No','Sales','Lokasi','Total Trx','Total Nilai','Done Payment','A/R','Lunas','Belum','% Lunas'];
     hdr.forEach((h,i)=>{const col=String.fromCharCode(65+i);ws[`${col}8`]={t:'s',v:h,s:{...boldWhite,...fillColor(C.header),...center(),...border()}};});
@@ -4098,8 +4308,9 @@ async function startApp(){
     updateDbInfo();
   }
   // Sesuaikan A/R & status semua transaksi lama dengan History Pembayarannya
-  const nSync=syncAllArStatus_();
-  if(nSync){ await saveData(); renderSidebar(); renderLanding(); toast(`${nSync} transaksi disesuaikan: A/R & status mengikuti History Pembayaran`); }
+  // Status & A/R yang belum mengikuti aturan bukti bayar -> diingatkan, diproses lewat Alat Bantu › Cek Status & A/R
+  const nCek=statusMismatch_().length;
+  if(nCek) setTimeout(()=>toast(`${nCek} transaksi status/A/R-nya belum sesuai aturan bukti bayar. Buka Alat Bantu › Cek Status & A/R.`,'info'),1200);
   showPaymentReminder();                   // pengingat customer terlambat bayar, tiap selesai login
 }
 
