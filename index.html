@@ -207,6 +207,8 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .fp-badge.fp-ok{background:#e8f8ef;color:var(--lunas);}
 .pay-list th.fp-th,.pay-list td.fp-td{text-align:center;width:34px;}
 .fp-check{width:16px;height:16px;cursor:pointer;accent-color:var(--lunas);}
+.item-edit td.currency{white-space:nowrap;}
+.item-edit tr.no-ppn td[id^="item-ppn"]{color:#b0b8c2;}
 .fix-table{width:100%;border-collapse:collapse;font-size:11.5px;}
 .fix-table th{background:#f5f7fa;padding:7px 8px;text-align:left;font-size:10px;color:var(--text-light);text-transform:uppercase;position:sticky;top:0;}
 .fix-table td{padding:7px 8px;border-bottom:1px solid #f0f2f5;vertical-align:top;}
@@ -2199,8 +2201,11 @@ function itemRowSubtotal_(it){ return (Number(it.qty)||0)*(Number(it.harga)||0);
 // DPP Total & PPN = jumlah (Qty × per unit). TOTAL = DPP Total − Discount + PPN.
 let editOrigTotal_=null;
 const npwpState_={mesin:false,spare:false};
+// Barang 'Bebas PPN': DPP = Harga, PPN = 0
+function itemSplit_(it){ return it&&it.noPpn ? {dpp:Number(it.harga)||0, ppn:0} : taxSplit_(it&&it.harga); }
+function itemTaxCell_(it,k){ return (Number(it&&it.harga)||0) ? (k==='ppn'&&it.noPpn ? '0' : idFmtNum_(itemSplit_(it)[k])) : '-'; }
 function itemTaxTotals_(){
-  return itemRows.reduce((a,it)=>{ const q=Number(it.qty)||0, t=taxSplit_(it.harga); a.dpp+=q*t.dpp; a.ppn+=q*t.ppn; return a; },{dpp:0,ppn:0});
+  return itemRows.reduce((a,it)=>{ const q=Number(it.qty)||0, t=itemSplit_(it); a.dpp+=q*t.dpp; a.ppn+=q*t.ppn; return a; },{dpp:0,ppn:0});
 }
 function formDpp_(prefix){
   const px=prefix==='mesin'?'m':'s';
@@ -2224,7 +2229,8 @@ function onNpwpInput_(prefix){
 function updateItemTaxCells_(i){
   const it=itemRows[i]; if(!it) return;
   const a=document.getElementById('item-dpp-'+i), b=document.getElementById('item-ppn-'+i);
-  if(a) a.textContent=taxCell_(it.harga,'dpp'); if(b) b.textContent=taxCell_(it.harga,'ppn');
+  if(a) a.textContent=itemTaxCell_(it,'dpp'); if(b) b.textContent=itemTaxCell_(it,'ppn');
+  const row=document.getElementById('itemrow-'+i); if(row) row.classList.toggle('no-ppn',!!it.noPpn);
 }
 function updateTotalHint_(prefix){
   const px=prefix==='mesin'?'m':'s', el=document.getElementById(px+'-total-hint'); if(!el) return;
@@ -2253,15 +2259,16 @@ function renderItemRows(prefix){
   const isMesin=prefix==='mesin';
   npwpState_[prefix]=hasNpwp_(prefix);
   let h=`<table class="pay-list pay-edit item-edit ${hasNpwp_(prefix)?'with-tax':''}"><thead><tr>
-    <th>Nama Barang</th><th>Qty</th><th>Harga/Unit (Rp)</th><th class="tax-col">DPP / Unit</th><th class="tax-col">PPN / Unit</th><th>Subtotal (Rp)</th><th>No. Seri</th>${isMesin?'<th>Foto No. Seri</th>':''}<th></th>
+    <th>Nama Barang</th><th>Qty</th><th>Harga/Unit (Rp)</th><th class="tax-col fp-th" style="white-space:nowrap">Bebas PPN</th><th class="tax-col">DPP / Unit</th><th class="tax-col">PPN / Unit</th><th>Subtotal (Rp)</th><th>No. Seri</th>${isMesin?'<th>Foto No. Seri</th>':''}<th></th>
   </tr></thead><tbody>`;
   itemRows.forEach((it,i)=>{
     const hasImg=it._imgPreview||it._hasImg;
-    h+=`<tr id="itemrow-${i}">
+    h+=`<tr id="itemrow-${i}" class="${it.noPpn?'no-ppn':''}">
       <td><input type="text" value="${(it.barang||'').replace(/"/g,'&quot;')}" placeholder="Nama barang" oninput="itemRows[${i}].barang=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:160px"></td>
       <td><input type="number" value="${it.qty||1}" min="1" oninput="itemRows[${i}].qty=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:60px"></td>
       <td><input type="number" value="${it.harga||0}" oninput="itemRows[${i}].harga=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
-      <td class="tax-col tax-val" id="item-dpp-${i}">${taxCell_(it.harga,'dpp')}</td><td class="tax-col tax-val" id="item-ppn-${i}">${taxCell_(it.harga,'ppn')}</td>
+      <td class="tax-col fp-td"><input type="checkbox" class="fp-check" ${it.noPpn?'checked':''} onchange="itemRows[${i}].noPpn=this.checked;updateItemSubtotalCell_(${i},'${prefix}')" title="Centang kalau barang/jasa ini tidak kena PPN"></td>
+      <td class="tax-col tax-val" id="item-dpp-${i}">${itemTaxCell_(it,'dpp')}</td><td class="tax-col tax-val" id="item-ppn-${i}">${itemTaxCell_(it,'ppn')}</td>
       <td class="currency" id="item-subtotal-${i}">${fmt(itemRowSubtotal_(it))}</td>
       <td><input type="text" value="${(it.seri||'').replace(/"/g,'&quot;')}" placeholder="-" oninput="itemRows[${i}].seri=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:90px"></td>
       ${isMesin?`<td>
@@ -2272,7 +2279,7 @@ function renderItemRows(prefix){
       <td><button onclick="removeItemRow(${i},'${prefix}')" style="background:#fdecea;border:none;color:#e74c3c;padding:3px 7px;border-radius:4px;cursor:pointer;font-size:11px">✕</button></td>
     </tr>`;
   });
-  if(!itemRows.length) h+=`<tr><td colspan="${isMesin?9:8}" style="text-align:center;padding:12px;color:#999;font-size:11px">Belum ada barang — klik "+ Tambah Barang"</td></tr>`;
+  if(!itemRows.length) h+=`<tr><td colspan="${isMesin?10:9}" style="text-align:center;padding:12px;color:#999;font-size:11px">Belum ada barang — klik "+ Tambah Barang"</td></tr>`;
   h+=`</tbody></table>`;
   el.innerHTML=h;
   recalcItemsTotal_(prefix);
@@ -2388,7 +2395,7 @@ async function editMesin(id){
   itemRows=await Promise.all(rawItems.map(async(it,i)=>{
     let imgData=await loadImage(`mesin_${id}_item_${i}_seri`).catch(()=>null);
     if(!imgData && i===0) imgData=await loadImage(`mesin_${id}_seri`).catch(()=>null); // fallback data lama
-    return{barang:it.barang||'',qty:it.qty||1,harga:it.harga||0,seri:it.seri||'',_hasImg:!!imgData,_imgPreview:imgData||null,_imgData:imgData||null};
+    return{barang:it.barang||'',qty:it.qty||1,harga:it.harga||0,seri:it.seri||'',noPpn:!!it.noPpn,_hasImg:!!imgData,_imgPreview:imgData||null,_imgData:imgData||null};
   }));
   document.getElementById('modal-mesin-title').textContent='Edit Penjualan Mesin';
   document.getElementById('m-tgl-po').value=r.tglPO||'';
@@ -2420,7 +2427,7 @@ async function saveMesin(){
   for(const[i,it] of itemRows.entries()){
     if(!it.barang){ toast(`Nama barang pada baris ${i+1} belum diisi`,'error'); return; }
   }
-  const cleanItems=itemRows.map(it=>({barang:it.barang,qty:Number(it.qty)||0,harga:Number(it.harga)||0,seri:it.seri||''}));
+  const cleanItems=itemRows.map(it=>({barang:it.barang,qty:Number(it.qty)||0,harga:Number(it.harga)||0,seri:it.seri||'',...(it.noPpn?{noPpn:true}:{})}));
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
@@ -2491,7 +2498,7 @@ async function editSpare(id){
   }));
   // Migrasi data lama (sebelum fitur multi-barang) yang cuma punya 1 barang
   itemRows=((r.items&&r.items.length)?r.items:[{barang:r.barang||'',qty:r.qty||1,harga:r.harga||0,seri:r.seri||''}])
-    .map(it=>({barang:it.barang||'',qty:it.qty||1,harga:it.harga||0,seri:it.seri||''}));
+    .map(it=>({barang:it.barang||'',qty:it.qty||1,harga:it.harga||0,seri:it.seri||'',noPpn:!!it.noPpn}));
   document.getElementById('modal-spare-title').textContent='Edit Spareparts';
   document.getElementById('s-tgl-po').value=r.tglPO||'';
   document.getElementById('s-no-po').value=r.noPO||'';
@@ -2524,7 +2531,7 @@ async function saveSpare(){
   for(const[i,it] of itemRows.entries()){
     if(!it.barang){ toast(`Nama barang pada baris ${i+1} belum diisi`,'error'); return; }
   }
-  const cleanItems=itemRows.map(it=>({barang:it.barang,qty:Number(it.qty)||0,harga:Number(it.harga)||0,seri:it.seri||''}));
+  const cleanItems=itemRows.map(it=>({barang:it.barang,qty:Number(it.qty)||0,harga:Number(it.harga)||0,seri:it.seri||'',...(it.noPpn?{noPpn:true}:{})}));
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
