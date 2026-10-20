@@ -384,6 +384,8 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
 .ar-value{font-weight:700;color:var(--belum);}
 .ar-value.ar-nol{color:var(--lunas);}
 .ar-value.ar-lebih{color:#d35400;}
+.ar-wait{display:inline-block;font-weight:700;color:#8a96a3;font-size:11px;white-space:nowrap;text-align:right;}
+.ar-wait small{display:block;font-weight:500;font-size:10px;color:#a3adb8;}
 .ar-hint{display:block;margin-top:4px;font-size:11px;color:var(--text-light);line-height:1.35;}
 .plan-divider{color:#c62828 !important;margin-top:18px;}
 .plan-list input{color:#c62828 !important;font-weight:600;border-color:#f3c4c0 !important;}
@@ -758,7 +760,7 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
           <select id="m-status" disabled style="background:#f5f7fa" title="Otomatis LUNAS kalau pembayaran yang sudah ada buktinya menutup Total"><option value="BELUM">BELUM LUNAS</option><option value="LUNAS">LUNAS</option></select>
         </div>
         <div class="form-group"><label>Tanggal Lunas</label><input type="date" id="m-tgl-lunas"></div>
-        <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="m-tgl-kirim"></div>
+        <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="m-tgl-kirim" onchange="calcArAuto_('mesin')"></div>
         <div class="form-group"><label>Tanggal Setup</label><input type="date" id="m-tgl-setup"></div>
         <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="m-ar" placeholder="0"><small class="ar-hint" id="m-ar-hint"></small></div>
         <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="m-pph" placeholder="0" min="0" oninput="calcArAuto_('mesin')"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
@@ -818,7 +820,7 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
         <div class="form-group"><label>TOTAL (Rp) — DPP − Discount + PPN</label><input type="number" id="s-total" readonly style="background:#f5f7fa"><small class="field-hint" id="s-total-hint"></small></div>
         <div class="form-group"><label>Status — Otomatis</label><select id="s-status" disabled style="background:#f5f7fa" title="Otomatis LUNAS kalau pembayaran yang sudah ada buktinya menutup Total"><option value="BELUM">BELUM LUNAS</option><option value="LUNAS">LUNAS</option></select></div>
         <div class="form-group"><label>Tanggal Lunas</label><input type="date" id="s-jadwal-pay"></div>
-        <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="s-tgl-kirim"></div>
+        <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="s-tgl-kirim" onchange="calcArAuto_('spare')"></div>
         <div class="form-group"><label>Tanggal Pasang</label><input type="date" id="s-tgl-pasang"></div>
         <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="s-ar" placeholder="0"><small class="ar-hint" id="s-ar-hint"></small></div>
         <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="s-pph" placeholder="0" min="0" oninput="calcArAuto_('spare')"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
@@ -1099,6 +1101,16 @@ function arStatusOf_(r){
   const sisa=Math.round(((Number(r.total)||0)-settledOf_(r))*100)/100;
   return {ar:sisa, status:sisa<1?'LUNAS':'BELUM'};
 }
+// A/R baru BERJALAN setelah barang dikirim (Tanggal Kirim terisi). Sebelum itu transaksi hanya
+// tercatat: tidak ikut Total A/R, Dashboard, Cetak AR, maupun Payment Reminder.
+function isShipped_(r){ return !!String((r&&r.tglKirim)||'').trim(); }
+function isArActive_(r){ return isShipped_(r) && r.status!=='LUNAS'; }
+function arActive_(r){ return isArActive_(r) ? (Number(r.ar)||0) : 0; }
+function arCell_(r){
+  const ar=Number(r.ar)||0;
+  if(!isShipped_(r) && r.status!=='LUNAS') return `<span class="ar-wait" title="A/R belum berjalan karena Tanggal Kirim belum diisi">Belum dikirim<small>${fmt(ar)}</small></span>`;
+  return `<span class="ar-value ${ar<0?'ar-lebih':Math.abs(ar)<1?'ar-nol':''}">${ar<0?'Lebih '+fmt(-ar):fmt(ar)}</span>`;
+}
 function syncArStatus_(r){
   const before=r.ar+'|'+r.status;
   const x=arStatusOf_(r); r.ar=x.ar; r.status=x.status;
@@ -1129,6 +1141,8 @@ function calcArAuto_(prefix){
   if(Math.abs(sisa)<1){ hint.className='ar-hint ok'; hint.textContent=`✅ Lunas. ${rinci}.${warn}`; }
   else if(sisa>0){ hint.className=noProof.length?'ar-hint lebih':'ar-hint kurang'; hint.textContent=`Kurang ${fmt(sisa)}. ${rinci}.${warn}`; }
   else { hint.className='ar-hint lebih'; hint.textContent=`⚠️ Lebih bayar ${fmt(-sisa)}. ${rinci}.${warn}`; }
+  const kirim=g('tgl-kirim');
+  if(kirim && !kirim.value && sisa>=1) hint.textContent+=' 📦 Tanggal Kirim belum diisi — A/R belum berjalan (belum dihitung di Total A/R & laporan).';
 }
 
 function labelAllPayments_(){
@@ -1347,15 +1361,15 @@ function renderSidebar(){
   let html='';
   db.locations.forEach((city,ci)=>{
     const cityS=db.sales.filter(s=>s.kota===city);
-    const cityTot=cityS.reduce((a,s)=>a+db.mesin.filter(m=>m.salesId===s.id&&m.status!=='LUNAS').length+db.spare.filter(m=>m.salesId===s.id&&m.status!=='LUNAS').length,0);
+    const cityTot=cityS.reduce((a,s)=>a+db.mesin.filter(m=>m.salesId===s.id&&isArActive_(m)).length+db.spare.filter(m=>m.salesId===s.id&&isArActive_(m)).length,0);
     html+=`<div class="city-group ${openCities_.has(city)?'open':''}">
       <div class="city-header" onclick="toggleCity_(${ci})" title="Klik untuk menampilkan / menyembunyikan nama sales">
         <div class="city-header-left"><span class="city-caret">▶</span>${getCityIcon(city)} ${city}${cityTot>0?`<span class="city-badge">${cityTot}</span>`:''}</div>
         <button class="btn-del-city" onclick="event.stopPropagation();requireAuth(deleteLocation,'${city.replace(/'/g,"\\'")}')" title="Hapus lokasi">✕</button>
       </div>`;
     cityS.forEach(s=>{
-      const tot=db.mesin.filter(m=>m.salesId===s.id&&m.status!=='LUNAS').length
-               +db.spare.filter(m=>m.salesId===s.id&&m.status!=='LUNAS').length;
+      const tot=db.mesin.filter(m=>m.salesId===s.id&&isArActive_(m)).length
+               +db.spare.filter(m=>m.salesId===s.id&&isArActive_(m)).length;
       const act=currentSalesId===s.id;
       html+=`<div class="sales-row">
         <button class="sales-btn ${act?'active':''}" onclick="selectSales('${s.id}')">
@@ -1385,8 +1399,8 @@ function renderLanding(){
   if(!cc) return;
   cc.innerHTML=db.locations.map(city=>{
     const cnt=db.sales.filter(s=>s.kota===city).length;
-    const ar=db.mesin.filter(m=>db.sales.find(s=>s.kota===city&&s.id===m.salesId)).reduce((a,r)=>a+(r.ar||0),0)
-            +db.spare.filter(m=>db.sales.find(s=>s.kota===city&&s.id===m.salesId)).reduce((a,r)=>a+(r.ar||0),0);
+    const ar=db.mesin.filter(m=>db.sales.find(s=>s.kota===city&&s.id===m.salesId)).reduce((a,r)=>a+arActive_(r),0)
+            +db.spare.filter(m=>db.sales.find(s=>s.kota===city&&s.id===m.salesId)).reduce((a,r)=>a+arActive_(r),0);
     return `<div class="city-card" onclick="selectCity('${city.replace(/'/g,"\\'")}')">
       <div class="city-icon">${getCityIcon(city)}</div>
       <div class="city-name">${city}</div>
@@ -1415,7 +1429,7 @@ function lunasDateOf_(r){
   return ds.length?ds[ds.length-1]:'';
 }
 function lunasYearStats_(records){
-  const byYear={}, noDate=[], belum=[];
+  const byYear={}, noDate=[], belum=[], unshipped=[];
   records.forEach(r=>{
     if(r.status==='LUNAS'){
       const d=lunasDateOf_(r);
@@ -1423,15 +1437,15 @@ function lunasYearStats_(records){
       const y=Number(d.slice(0,4));
       (byYear[y]=byYear[y]||{n:0,val:0,cust:new Set(),list:[]});
       byYear[y].n++; byYear[y].val+=Number(r.total)||0; byYear[y].cust.add(String(r.customer||'').trim().toLowerCase()); byYear[y].list.push(r);
-    } else belum.push(r);
+    } else if(isShipped_(r)) belum.push(r); else unshipped.push(r);
   });
-  return {byYear,noDate,belum};
+  return {byYear,noDate,belum,unshipped};
 }
 let lunasDetailSets_={};
 function lunasYearCard_(records,scope){
   const st=lunasYearStats_(records);
   const years=[...new Set([2025,2026,...Object.keys(st.byYear).map(Number)])].sort((a,b)=>a-b);
-  lunasDetailSets_[scope]={...Object.fromEntries(years.map(y=>[y,(st.byYear[y]||{list:[]}).list])), belum:st.belum, nodate:st.noDate};
+  lunasDetailSets_[scope]={...Object.fromEntries(years.map(y=>[y,(st.byYear[y]||{list:[]}).list])), belum:st.belum, nodate:st.noDate, unshipped:st.unshipped};
   const fmtS=v=>{ v=Number(v)||0; return v>=1e9?'Rp '+(v/1e9).toLocaleString('id-ID',{maximumFractionDigits:2})+' M':v>=1e6?'Rp '+(v/1e6).toLocaleString('id-ID',{maximumFractionDigits:1})+' jt':fmt(v); };
   const tile=(y,i)=>{
     const d=st.byYear[y]||{n:0,val:0,cust:new Set()};
@@ -1457,15 +1471,16 @@ function lunasYearCard_(records,scope){
       </div>
     </div>
     ${st.noDate.length?`<p class="ly-note">⚠️ ${st.noDate.length} transaksi berstatus LUNAS tapi belum ada pembayaran ber-bukti, jadi tidak masuk tahun mana pun. <a onclick="showLunasDetail_('${scope}','nodate')">Lihat</a> · jalankan Alat Bantu › Cek Status &amp; A/R.</p>`:''}
-    <p class="ly-note">Tahun lunas = tanggal pembayaran terakhir yang buktinya sudah di-upload.</p>
+    ${st.unshipped.length?`<p class="ly-note">📦 ${st.unshipped.length} transaksi belum dikirim (Rp ${invNum_(st.unshipped.reduce((a,r)=>a+(Number(r.ar)||0),0))}) — belum dihitung sebagai A/R. <a onclick="showLunasDetail_('${scope}','unshipped')">Lihat</a></p>`:''}
+    <p class="ly-note">Tahun lunas = tanggal pembayaran terakhir yang buktinya sudah di-upload. A/R mulai dihitung setelah Tanggal Kirim diisi.</p>
   </div>`;
 }
 function showLunasDetail_(scope,key){
   const list=((lunasDetailSets_[scope]||{})[key]||[]).slice();
-  const isBelum=key==='belum';
+  const isBelum=key==='belum'||key==='unshipped';
   const sName=id=>{const s=db.sales.find(x=>x.id===id);return s?s.nama:'-';};
   list.sort((a,b)=>isBelum?(Number(b.ar)||0)-(Number(a.ar)||0):String(lunasDateOf_(a)).localeCompare(String(lunasDateOf_(b))));
-  const title=isBelum?'Belum Lunas (A/R)':key==='nodate'?'LUNAS tanpa pembayaran ber-bukti':'LUNAS '+key;
+  const title=key==='unshipped'?'Belum Dikirim (belum jadi A/R)':isBelum?'Belum Lunas (A/R)':key==='nodate'?'LUNAS tanpa pembayaran ber-bukti':'LUNAS '+key;
   const tot=list.reduce((a,r)=>a+(Number(isBelum?r.ar:r.total)||0),0);
   let h=`<p class="text-sm" style="margin-bottom:10px"><b>${title}</b> — ${list.length} transaksi · ${isBelum?'sisa tagihan':'nilai'} ${fmt(tot)}</p>
     <div class="fix-wrap"><table class="fix-table"><thead><tr><th>Customer</th><th>Barang</th><th>Sales</th><th style="text-align:right">Total</th><th style="text-align:right">${isBelum?'A/R':'Dibayar'}</th><th>${isBelum?'Bayar terakhir':'Tanggal lunas'}</th></tr></thead><tbody>`;
@@ -1486,16 +1501,16 @@ function showDashboard(){
   const mc=document.getElementById('main-content');
   const allM=db.mesin,allS=db.spare;
   const totalVal=[...allM,...allS].reduce((a,r)=>a+(r.total||0),0);
-  const totalAR=[...allM,...allS].reduce((a,r)=>a+(r.ar||0),0);
+  const totalAR=[...allM,...allS].reduce((a,r)=>a+arActive_(r),0);
   const totalLunas=[...allM,...allS].filter(r=>r.status==='LUNAS').length;
   const totalAll=[...allM,...allS].length;
-  const totalBelum=[...allM,...allS].filter(r=>r.status==='BELUM').length;
+  const totalBelum=[...allM,...allS].filter(isArActive_).length;
   const totalProg=[...allM,...allS].filter(r=>r.status==='PROGRESS').length;
   const salesRows=db.sales.map(s=>{
     const sm=[...db.mesin.filter(m=>m.salesId===s.id),...db.spare.filter(m=>m.salesId===s.id)];
-    return{sales:s,total:sm.reduce((a,r)=>a+(r.total||0),0),ar:sm.reduce((a,r)=>a+(r.ar||0),0),lunas:sm.filter(r=>r.status==='LUNAS').length,count:sm.length};
+    return{sales:s,total:sm.reduce((a,r)=>a+(r.total||0),0),ar:sm.reduce((a,r)=>a+arActive_(r),0),lunas:sm.filter(r=>r.status==='LUNAS').length,count:sm.length};
   }).filter(r=>r.count>0).sort((a,b)=>b.ar-a.ar);
-  const belumRecords=[...allM,...allS].filter(r=>r.status!=='LUNAS').sort((a,b)=>b.ar-a.ar).slice(0,10);
+  const belumRecords=[...allM,...allS].filter(isArActive_).sort((a,b)=>b.ar-a.ar).slice(0,10);
   const pLunas=pct(totalLunas,totalAll),pBelum=pct(totalBelum,totalAll),pProg=pct(totalProg,totalAll);
   const pie=buildPie([{label:'Lunas',value:totalLunas,color:'#27ae60'},{label:'Progress',value:totalProg,color:'#f39c12'},{label:'Belum',value:totalBelum,color:'#e74c3c'}]);
   mc.innerHTML=`<div class="topbar"><h2>📈 Dashboard — ${db.ptInfo.nama||'AR Management'}</h2><span class="topbar-meta">Update: ${new Date().toLocaleDateString('id-ID')}</span></div>
@@ -1574,9 +1589,9 @@ function switchTab(t){currentTab=t;renderMain();}
 
 function renderSummary(records){
   const total=records.reduce((a,r)=>a+(r.total||0),0);
-  const ar=records.reduce((a,r)=>a+(r.ar||0),0);
+  const ar=records.reduce((a,r)=>a+arActive_(r),0);
   const lunas=records.filter(r=>r.status==='LUNAS').length;
-  const belum=records.filter(r=>r.status!=='LUNAS').length;
+  const belum=records.filter(isArActive_).length;
   return`<div class="summary-grid">
     <div class="summary-card"><div class="label">Total Transaksi</div><div class="value">${records.length}</div><div class="sub">${lunas} lunas / ${belum} pending</div></div>
     <div class="summary-card"><div class="label">Total Nilai</div><div class="value" style="font-size:14px">${fmt(total)}</div></div>
@@ -1590,12 +1605,12 @@ function renderDashTab(tc){
   const sRec=db.spare.filter(m=>m.salesId===currentSalesId);
   const allRec=[...mRec,...sRec];
   const totalVal=allRec.reduce((a,r)=>a+(r.total||0),0);
-  const totalAR=allRec.reduce((a,r)=>a+(r.ar||0),0);
+  const totalAR=allRec.reduce((a,r)=>a+arActive_(r),0);
   const L=allRec.filter(r=>r.status==='LUNAS').length;
   const P=allRec.filter(r=>r.status==='PROGRESS').length;
   const B=allRec.filter(r=>r.status==='BELUM').length;
   const pie=buildPie([{label:'Lunas',value:L,color:'#27ae60'},{label:'Progress',value:P,color:'#f39c12'},{label:'Belum',value:B,color:'#e74c3c'}]);
-  const belum=allRec.filter(r=>r.status!=='LUNAS').sort((a,b)=>b.ar-a.ar);
+  const belum=allRec.filter(isArActive_).sort((a,b)=>b.ar-a.ar);
   tc.innerHTML=`<div class="summary-grid">
     <div class="summary-card"><div class="label">Total Transaksi</div><div class="value">${allRec.length}</div><div class="sub">Mesin: ${mRec.length} | Spare: ${sRec.length}</div></div>
     <div class="summary-card"><div class="label">Total Nilai</div><div class="value" style="font-size:14px">${fmt(totalVal)}</div></div>
@@ -1607,8 +1622,8 @@ function renderDashTab(tc){
     <div class="dash-card"><h3>💰 Ringkasan Nilai</h3><table class="ar-table">
       <thead><tr><th>Kategori</th><th>Transaksi</th><th>Total Nilai</th><th>Done Payment</th><th>A/R</th></tr></thead>
       <tbody>
-        <tr><td><b>Mesin</b></td><td>${mRec.length}</td><td class="currency">${fmt(mRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(mRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(mRec.reduce((a,r)=>a+(r.ar||0),0))}</td></tr>
-        <tr><td><b>Sparepart/Jasa</b></td><td>${sRec.length}</td><td class="currency">${fmt(sRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(sRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(sRec.reduce((a,r)=>a+(r.ar||0),0))}</td></tr>
+        <tr><td><b>Mesin</b></td><td>${mRec.length}</td><td class="currency">${fmt(mRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(mRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(mRec.reduce((a,r)=>a+arActive_(r),0))}</td></tr>
+        <tr><td><b>Sparepart/Jasa</b></td><td>${sRec.length}</td><td class="currency">${fmt(sRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(sRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(sRec.reduce((a,r)=>a+arActive_(r),0))}</td></tr>
       </tbody></table></div>
     <div class="dash-card full"><h3>🔴 Daftar Belum Lunas</h3><table class="ar-table">
       <thead><tr><th>Customer</th><th>Barang</th><th>Tgl PO</th><th>Tgl Kirim</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th></tr></thead>
@@ -1749,6 +1764,7 @@ function overdueList_(){
   const today=new Date(); today.setHours(0,0,0,0);
   const out=[];
   [['mesin',db.mesin],['spare',db.spare]].forEach(([type,arr])=>(arr||[]).forEach(r=>{
+    if(!isShipped_(r)) return;   // A/R belum berjalan
     const pays=r.payments||[];
     const sisaHitung=(Number(r.total)||0)-settledOf_(r);
     // Sisa yang masih harus dibayar; transaksi yang sisanya 0 tidak ditampilkan
@@ -1925,7 +1941,7 @@ async function renderMesinTableBody(){
       <td>${chips}</td>
       <td style="text-align:center">${fpBadge_(r)}</td>
       <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span>${r.tglLunas?`<br><span class="text-sm">${fmtDate(r.tglLunas)}</span>`:''}</td>
-      <td class="text-right"><span class="ar-value ${Number(r.ar)<0?'ar-lebih':Math.abs(Number(r.ar)||0)<1?'ar-nol':''}">${Number(r.ar)<0?'Lebih '+fmt(-Number(r.ar)):fmt(Number(r.ar)||0)}</span></td>
+      <td class="text-right">${arCell_(r)}</td>
       <td>${fmtDate(r.tglKirim)}</td>
       <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','mesin')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editMesin('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteMesin('${r.id}')">🗑️</button></td>
     </tr>`;
@@ -1978,7 +1994,7 @@ async function renderSpareTableBody(){
       <td>${chips}</td>
       <td style="text-align:center">${fpBadge_(r)}</td>
       <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td>
-      <td class="text-right"><span class="ar-value ${Number(r.ar)<0?'ar-lebih':Math.abs(Number(r.ar)||0)<1?'ar-nol':''}">${Number(r.ar)<0?'Lebih '+fmt(-Number(r.ar)):fmt(Number(r.ar)||0)}</span></td>
+      <td class="text-right">${arCell_(r)}</td>
       <td>${fmtDate(r.jadwalPay)}</td>
       <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','spare')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editSpare('${r.id}')">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteSpare('${r.id}')">🗑️</button></td>
     </tr>`;
@@ -3887,7 +3903,7 @@ function exportXLSX(){
     const firstData=R; const totalCells=[];
     const salesList=db.sales.filter(sl=>[...db.mesin,...db.spare].some(r=>r.salesId===sl.id));
     salesList.forEach(sl=>{
-      const recs=[...db.mesin.filter(r=>r.salesId===sl.id),...db.spare.filter(r=>r.salesId===sl.id)]
+      const recs=[...db.mesin.filter(r=>r.salesId===sl.id),...db.spare.filter(r=>r.salesId===sl.id)].filter(isShipped_)
         .sort((a,b)=>String(a.tglPO||'').localeCompare(String(b.tglPO||'')));
       const pic=sl.nama;
       put(R,0,{t:'s',v:pic,s:sPic});
@@ -3940,8 +3956,8 @@ function exportXLSX(){
     const ws={};
     const allRec=[...db.mesin,...db.spare];
     const totalVal=allRec.reduce((a,r)=>a+num(r.total),0);
-    const totalAR=allRec.reduce((a,r)=>a+num(r.ar),0);
-    const totalDone=totalVal-totalAR;
+    const totalAR=allRec.reduce((a,r)=>a+arActive_(r),0);
+    const totalDone=allRec.reduce((a,r)=>a+doneOf_(r),0);
     const L=allRec.filter(r=>r.status==='LUNAS').length;
     const B=allRec.filter(r=>r.status==='BELUM').length;
     const P=allRec.filter(r=>r.status==='PROGRESS').length;
@@ -3962,11 +3978,11 @@ function exportXLSX(){
     hdr.forEach((h,i)=>{const col=String.fromCharCode(65+i);ws[`${col}8`]={t:'s',v:h,s:{...boldWhite,...fillColor(C.header),...center(),...border()}};});
     const salesRows=db.sales.map(s=>{
       const sm=[...db.mesin.filter(m=>m.salesId===s.id),...db.spare.filter(m=>m.salesId===s.id)];
-      return{sales:s,total:sm.reduce((a,r)=>a+(r.total||0),0),ar:sm.reduce((a,r)=>a+(r.ar||0),0),lunas:sm.filter(r=>r.status==='LUNAS').length,belum:sm.filter(r=>r.status!=='LUNAS').length,count:sm.length};
+      return{sales:s,total:sm.reduce((a,r)=>a+(r.total||0),0),done:sm.reduce((a,r)=>a+doneOf_(r),0),ar:sm.reduce((a,r)=>a+arActive_(r),0),lunas:sm.filter(r=>r.status==='LUNAS').length,belum:sm.filter(isArActive_).length,count:sm.length};
     }).filter(r=>r.count>0);
     salesRows.forEach((r,i)=>{
       const row=9+i;const bg=i%2===0?C.white:'F8F9FB';
-      const cols=[i+1,r.sales.nama,r.sales.kota,r.count,r.total,r.total-r.ar,r.ar,r.lunas,r.belum,r.count>0?Math.round(r.lunas/r.count*100)+'%':'0%'];
+      const cols=[i+1,r.sales.nama,r.sales.kota,r.count,r.total,r.done,r.ar,r.lunas,r.belum,r.count>0?Math.round(r.lunas/r.count*100)+'%':'0%'];
       cols.forEach((v,ci)=>{const col=String.fromCharCode(65+ci);const isCurr=ci===4||ci===5||ci===6;ws[`${col}${row}`]={t:isCurr?'n':'s',v,s:{font:{sz:10,color:{rgb:ci===6&&r.ar>0?C.belum:ci===5?C.lunas:C.header},name:'Calibri'},fill:{patternType:'solid',fgColor:{rgb:bg}},alignment:{horizontal:isCurr?'right':ci===0||ci===3||ci===7||ci===8||ci===9?'center':'left',vertical:'center'},...border()}};if(isCurr)ws[`${col}${row}`].z='"Rp "#,##0';});
     });
     const lr=9+salesRows.length;
@@ -3992,12 +4008,12 @@ function exportXLSX(){
       cityS.forEach(sales=>{
         const records=db.mesin.filter(m=>m.salesId===sales.id);
         if(!records.length){aoa.push(['-','(Belum ada transaksi)',...Array(hdr.length-2).fill('')]);return;}
-        records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,sales.nama,r.customer,r.pic,r.barang,r.qty,r.seri,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[1]?r.payments[1].jumlah:'',r.payments[1]?r.payments[1].tgl:'',r.payments[2]?r.payments[2].jumlah:'',r.payments[2]?r.payments[2].tgl:'',statusLabel(r.status),r.tglLunas,r.ket,r.tglKirim,r.tglSetup,num(r.ar)]);});
-        const tot=records.reduce((a,r)=>a+num(r.total),0);const ar=records.reduce((a,r)=>a+num(r.ar),0);
+        records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,sales.nama,r.customer,r.pic,r.barang,r.qty,r.seri,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[1]?r.payments[1].jumlah:'',r.payments[1]?r.payments[1].tgl:'',r.payments[2]?r.payments[2].jumlah:'',r.payments[2]?r.payments[2].tgl:'',statusLabel(r.status),r.tglLunas,r.ket,r.tglKirim,r.tglSetup,arActive_(r)]);});
+        const tot=records.reduce((a,r)=>a+num(r.total),0);const ar=records.reduce((a,r)=>a+arActive_(r),0);
         aoa.push(['','','','','','SUBTOTAL '+sales.nama,'','','','',tot,'','','','','','','','','','','',ar]);
       });
     });
-    const gT=db.mesin.reduce((a,r)=>a+num(r.total),0);const gA=db.mesin.reduce((a,r)=>a+num(r.ar),0);
+    const gT=db.mesin.reduce((a,r)=>a+num(r.total),0);const gA=db.mesin.reduce((a,r)=>a+arActive_(r),0);
     aoa.push(['','','','','','GRAND TOTAL','','','','',gT,'','','','','','','','','','','',gA]);
     const ws=XLSX.utils.aoa_to_sheet(aoa);
     const range=XLSX.utils.decode_range(ws['!ref']);
@@ -4049,12 +4065,12 @@ function exportXLSX(){
       cityS.forEach(sales=>{
         const records=db.spare.filter(m=>m.salesId===sales.id);
         if(!records.length){aoa.push(['-','(Belum ada transaksi)',...Array(hdr.length-2).fill('')]);return;}
-        records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,r.noPO,r.noInv,r.tglInv,r.picHandled,r.customer,r.pic,r.barang,r.jenis,r.qty,r.seri,r.harga,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[0]?r.payments[0].rek:'',r.payments[0]?r.payments[0].ket:'',statusLabel(r.status),r.jadwalPay,r.tglKirim,r.tglPasang,num(r.ar)]);});
-        const tot=records.reduce((a,r)=>a+num(r.total),0);const ar=records.reduce((a,r)=>a+num(r.ar),0);
+        records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,r.noPO,r.noInv,r.tglInv,r.picHandled,r.customer,r.pic,r.barang,r.jenis,r.qty,r.seri,r.harga,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[0]?r.payments[0].rek:'',r.payments[0]?r.payments[0].ket:'',statusLabel(r.status),r.jadwalPay,r.tglKirim,r.tglPasang,arActive_(r)]);});
+        const tot=records.reduce((a,r)=>a+num(r.total),0);const ar=records.reduce((a,r)=>a+arActive_(r),0);
         aoa.push(['','','','','','','SUBTOTAL '+sales.nama,'','','','','','','','',tot,'','','','','','','','',ar]);
       });
     });
-    const gT=db.spare.reduce((a,r)=>a+num(r.total),0);const gA=db.spare.reduce((a,r)=>a+num(r.ar),0);
+    const gT=db.spare.reduce((a,r)=>a+num(r.total),0);const gA=db.spare.reduce((a,r)=>a+arActive_(r),0);
     aoa.push(['','','','','','','GRAND TOTAL','','','','','','','','',gT,'','','','','','','','',gA]);
     const ws=XLSX.utils.aoa_to_sheet(aoa);
     // Gaya warna & font sama seperti sheet Mesin
@@ -4191,6 +4207,10 @@ function buildInvoiceDoc_(id, type, payIdx){
       return m[1];
     };
     const T={ITEM:grab('ITEM'),MID:grab('MID'),SUMN:grab('SUMN'),SUMB:grab('SUMB'),SPACER:grab('SPACER'),TOTAL:grab('TOTAL')};
+    // Kolom angka ringkasan: "Rp" di kiri + angka rata kanan memakai tab-stop kanan, supaya sejajar & rapi
+    const tabAmt=t=>{ const k=t.indexOf('@@AMT@@'); const pp=t.lastIndexOf('<w:pPr>',k);
+      return t.slice(0,pp)+'<w:pPr><w:tabs><w:tab w:val="right" w:pos="1860"/></w:tabs>'+t.slice(pp+7).replace('<w:t xml:space="preserve">@@AMT@@</w:t>','<w:t>Rp</w:t><w:tab/><w:t>@@AMT@@</w:t>'); };
+    T.SUMN=tabAmt(T.SUMN); T.SUMB=tabAmt(T.SUMB); T.TOTAL=tabAmt(T.TOTAL);
 
     // Baris barang: urut 1, 2, 3, ... beserta QTY, harga satuan, dan totalnya
     let rowsXml='';
@@ -4227,11 +4247,8 @@ function buildInvoiceDoc_(id, type, payIdx){
     const ppnTxt=perPay?(npwp&&Number(sel.jumlah)?invNum_(taxSplit_(sel.jumlah).ppn):'-'):(ppn>0?invNum_(ppn):'-');
     sums.push({label:'PPN',txt:ppnTxt,bold:true});
     const totalTxt=invNum_(perPay?sel.jumlah:total);
-    const unit=t=>{ let w=0; for(const ch of t) w+=(ch>='0'&&ch<='9')?2:1; return w; };
-    const maxW=Math.max(unit(totalTxt),...sums.map(s=>unit(s.txt)));
-    const wN=Math.max(26,maxW+3), wB=Math.max(23,maxW+2);
-    sums.forEach(s=>{ rowsXml+=invFill_(s.bold?T.SUMB:T.SUMN,{LABEL:invEsc_(s.label),AMT:invAmt_(s.txt,s.bold?wB:wN)}); });
-    rowsXml+=T.SPACER+invFill_(T.TOTAL,{AMT:invAmt_(totalTxt,wB)});
+    sums.forEach(s=>{ rowsXml+=invFill_(s.bold?T.SUMB:T.SUMN,{LABEL:invEsc_(s.label),AMT:s.txt}); });
+    rowsXml+=T.SPACER+invFill_(T.TOTAL,{AMT:totalTxt});
 
     const a=xml.indexOf('<!--ROWS-->'), b=xml.indexOf('<!--/ROWS-->');
     if(a<0||b<0) throw new Error('Template tabel tidak ditemukan');
