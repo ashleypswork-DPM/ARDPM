@@ -236,6 +236,7 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .ly-btn:disabled{opacity:.45;cursor:default;}
 .ly-note{font-size:10.5px;color:var(--text-light);margin-top:8px;}
 .ly-note a{color:var(--primary-light);cursor:pointer;font-weight:700;}
+.rek-select{border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:150px;background:#fff;font-family:inherit;}
 .fix-table{width:100%;border-collapse:collapse;font-size:11.5px;}
 .fix-table th{background:#f5f7fa;padding:7px 8px;text-align:left;font-size:10px;color:var(--text-light);text-transform:uppercase;position:sticky;top:0;}
 .fix-table td{padding:7px 8px;border-bottom:1px solid #f0f2f5;vertical-align:top;}
@@ -478,6 +479,7 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
         <button class="btn-sidebar side-child" onclick="openBooking()">🧾 Booking Nomor Invoice</button>
         <button class="btn-sidebar side-child" onclick="openFixPpn()">🛠️ Perbaiki PPN Manual</button>
         <button class="btn-sidebar side-child" onclick="openStatusCheck()">🔎 Cek Status &amp; A/R</button>
+        <button class="btn-sidebar side-child" onclick="openRekening()">🏦 Rekam Rekening</button>
         <button class="btn-sidebar side-child" onclick="openImportModal()">📥 Import dari Excel</button>
       </div>
     </div>
@@ -714,6 +716,32 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
       <button class="btn btn-outline" onclick="closeModal('modal-stcheck')">Tutup</button>
       <button class="btn btn-primary" id="stcheck-btn" onclick="requireAuth(applyStatusCheck_)">🔎 Proses yang Dicentang</button>
     </div>
+  </div>
+</div>
+<!-- MODAL: REKAM REKENING -->
+<div class="modal-overlay" id="modal-rekening" style="z-index:2000">
+  <div class="modal" style="max-width:860px">
+    <div class="modal-header"><h3>🏦 Rekam Rekening</h3><button class="modal-close" onclick="closeModal('modal-rekening')">×</button></div>
+    <div class="modal-body">
+      <div class="bk-form" id="rk-form">
+        <div class="bk-form-title" id="rk-form-title">Tambah Rekening</div>
+        <div class="form-grid" style="grid-template-columns:1.6fr 1fr 1fr;">
+          <div class="form-group"><label>Nama Bank - Kantor Cabang</label><input type="text" id="rk-bank" placeholder="Contoh: Bank BCA 0206 - KCU Thamrin"></div>
+          <div class="form-group"><label>No. Rek</label><input type="text" id="rk-norek" placeholder="Contoh: 1234567"></div>
+          <div class="form-group"><label>Nama Pemilik</label><input type="text" id="rk-nama" placeholder="Contoh: Sera"></div>
+        </div>
+        <div class="bk-actions">
+          <button class="btn btn-outline" id="rk-cancel" style="display:none" onclick="rkReset_()">Batal Edit</button>
+          <button class="btn btn-primary" id="rk-save" onclick="saveRekening()">💾 Simpan Rekening</button>
+        </div>
+      </div>
+      <div class="bk-table-wrap"><table class="pay-list bk-table">
+        <thead><tr><th>No</th><th>Nama Bank - Kantor Cabang</th><th>No. Rek</th><th>Nama Pemilik</th><th>Dipakai</th><th></th></tr></thead>
+        <tbody id="rk-tbody"></tbody>
+      </table></div>
+      <p class="text-sm" style="margin-top:8px;color:var(--text-light)">Rekening di sini muncul sebagai pilihan di kolom <b>Rekening</b> History Pembayaran, dan dicetak di invoice bagian "Pembayaran melalui rekening bank".</p>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-rekening')">Tutup</button></div>
   </div>
 </div>
 <div class="modal-overlay" id="modal-invlist">
@@ -1024,7 +1052,7 @@ function setSyncStatus(text){
 // ter-tulis di URL (browser history / server access log).
 // Code.gs yang terpasang (deployment /exec) masih versi lama -> Booking Nomor Invoice,
 // NPWP, dll. TIDAK ikut tersimpan ke Sheets. Tampilkan peringatan supaya kelihatan.
-const API_VERSION_NEEDED=5;
+const API_VERSION_NEEDED=6;
 let oldServerWarned_=false;
 function warnOldServer_(result){
   if(result && Number(result.apiVersion)>=API_VERSION_NEEDED) return false;
@@ -1048,9 +1076,11 @@ async function pullFromSheets(){
     if(result.status === 'success' && result.data){
       const parsed = JSON.parse(result.data);
       const localInv = Array.isArray(db && db.invBook) ? db.invBook : [];
+      const localRek = Array.isArray(db && db.rekening) ? db.rekening : [];
       db = { ...DEFAULT_DB, ...parsed };
       // Code.gs versi lama belum mengirim invBook -> pakai booking yang tersimpan lokal
       if(!Array.isArray(parsed.invBook)) db.invBook = localInv;
+      if(!Array.isArray(parsed.rekening)) db.rekening = localRek;
       if(!db.ptInfo) db.ptInfo = DEFAULT_DB.ptInfo;
       if(!db.locations) db.locations = DEFAULT_DB.locations;
       if(!db.locationIcons) db.locationIcons = DEFAULT_DB.locationIcons;
@@ -1084,7 +1114,7 @@ function payHasDP_(list){ return !!(list&&list[0]&&list[0].label==='DP'); }
 function payLabel_(i,hasDP){ return hasDP ? (i===0?'DP':'Pembayaran '+i) : 'Pembayaran '+(i+1); }
 function labelPayments_(list){
   const dp=payHasDP_(list);
-  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',fp:!!p.fp,tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||'',...(p.buktiId?{buktiId:p.buktiId,buktiUrl:p.buktiUrl||'',buktiName:p.buktiName||''}:{})}));
+  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',fp:!!p.fp,tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||'',...(p.rekId?{rekId:p.rekId}:{}),...(p.buktiId?{buktiId:p.buktiId,buktiUrl:p.buktiUrl||'',buktiName:p.buktiName||''}:{})}));
 }
 // A/R = Total − (semua pembayaran + PPh Jasa + Biaya Admin), dihitung kalau History Pembayaran
 // sudah berisi angka. Status otomatis LUNAS kalau sudah tertutup penuh.
@@ -2392,6 +2422,82 @@ async function applyStatusCheck_(){
   openStatusCheck();
 }
 
+// ═══════════════════════════════════════════════════════
+// REKAM REKENING (Alat Bantu) -> pilihan dropdown Rekening di History Pembayaran
+// db.rekening = [{id, bank, norek, nama}]
+// ═══════════════════════════════════════════════════════
+let rkEditingId=null;
+function rekList_(){ if(!Array.isArray(db.rekening)) db.rekening=[]; return db.rekening; }
+function rekShort_(k){ return k?[k.bank,k.norek].filter(Boolean).join(' · '):''; }
+function rekFull_(k){ return k?[k.bank,k.norek,k.nama].filter(Boolean).join(' · '):''; }
+function rekUsage_(id){ let n=0; [db.mesin,db.spare].forEach(a=>(a||[]).forEach(r=>(r.payments||[]).forEach(p=>{ if(p.rekId===id) n++; }))); return n; }
+function openRekening(){ closeSidebarMobile(); rkReset_(); renderRekening(); openModal('modal-rekening'); }
+function rkReset_(){
+  rkEditingId=null;
+  ['rk-bank','rk-norek','rk-nama'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('rk-form-title').textContent='Tambah Rekening';
+  document.getElementById('rk-save').innerHTML='💾 Simpan Rekening';
+  document.getElementById('rk-cancel').style.display='none';
+  document.getElementById('rk-form').classList.remove('editing');
+}
+function renderRekening(){
+  const L=rekList_(), tb=document.getElementById('rk-tbody');
+  if(!L.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;padding:20px;color:#999">Belum ada rekening tersimpan</td></tr>'; return; }
+  tb.innerHTML=L.map((k,i)=>`<tr><td class="bk-no">${i+1}</td><td><b>${escAttr_(k.bank)||'-'}</b></td><td>${escAttr_(k.norek)||'-'}</td><td>${escAttr_(k.nama)||'-'}</td>
+    <td>${rekUsage_(k.id)} pembayaran</td>
+    <td style="white-space:nowrap"><button class="icon-btn" title="Edit" onclick="editRekening('${k.id}')">✏️</button><button class="icon-btn del" title="Hapus" onclick="requireAuth(deleteRekening,'${k.id}')">🗑️</button></td></tr>`).join('');
+}
+function editRekening(id){
+  const k=rekList_().find(x=>x.id===id); if(!k) return;
+  rkEditingId=id;
+  document.getElementById('rk-bank').value=k.bank||''; document.getElementById('rk-norek').value=k.norek||''; document.getElementById('rk-nama').value=k.nama||'';
+  document.getElementById('rk-form-title').textContent='Edit Rekening';
+  document.getElementById('rk-save').innerHTML='💾 Simpan Perubahan';
+  document.getElementById('rk-cancel').style.display='';
+  document.getElementById('rk-form').classList.add('editing');
+}
+async function saveRekening(){
+  const bank=document.getElementById('rk-bank').value.trim(), norek=document.getElementById('rk-norek').value.trim(), nama=document.getElementById('rk-nama').value.trim();
+  if(!bank&&!norek){ toast('Isi minimal Nama Bank atau No. Rek','error'); return; }
+  if(rkEditingId){
+    const k=rekList_().find(x=>x.id===rkEditingId); Object.assign(k,{bank,norek,nama});
+    // perbarui teks rekening di pembayaran yang memakai rekening ini
+    [db.mesin,db.spare].forEach(a=>(a||[]).forEach(r=>(r.payments||[]).forEach(p=>{ if(p.rekId===k.id) p.rek=rekShort_(k); })));
+  } else rekList_().push({id:uid(),bank,norek,nama});
+  await saveData(); toast(rkEditingId?'Rekening diperbarui':'Rekening disimpan'); rkReset_(); renderRekening();
+  if(document.getElementById('modal-mesin').classList.contains('open')) renderPayRows('mesin');
+  if(document.getElementById('modal-spare').classList.contains('open')) renderPayRows('spare');
+}
+async function deleteRekening(id){
+  const k=rekList_().find(x=>x.id===id); if(!k) return;
+  const n=rekUsage_(id);
+  if(!confirm(`Hapus rekening "${rekFull_(k)}"?${n?`\n\nRekening ini dipakai di ${n} pembayaran. Teks rekeningnya tetap tersimpan di pembayaran tersebut.`:''}`)) return;
+  db.rekening=rekList_().filter(x=>x.id!==id);
+  await saveData(); renderRekening(); toast('Rekening dihapus');
+}
+// Kolom Rekening di History Pembayaran: dropdown dari daftar rekening
+function rekSelect_(p,i){
+  const L=rekList_();
+  let o=`<option value="">— Pilih —</option>`;
+  o+=L.map(k=>`<option value="${k.id}" ${p.rekId===k.id?'selected':''}>${escAttr_(rekFull_(k))}</option>`).join('');
+  if(p.rek && !L.some(k=>k.id===p.rekId)) o+=`<option value="__old__" selected>${escAttr_(p.rek)} (lama)</option>`;
+  return `<select class="rek-select" onchange="pickRek_(${i},this.value)" title="${escAttr_(p.rek||'')}">${o}</select>`;
+}
+function pickRek_(i,v){
+  const p=payRows[i]; if(!p) return;
+  if(v==='__old__') return;
+  const k=rekList_().find(x=>x.id===v);
+  p.rekId=k?k.id:''; p.rek=k?rekShort_(k):'';
+}
+// Rekening yang dicetak di invoice
+function invoiceRek_(r,sel){
+  const L=rekList_(), byId=id=>L.find(k=>k.id===id);
+  if(sel && byId(sel.rekId)) return byId(sel.rekId);
+  const last=[...(r.payments||[])].reverse().find(p=>byId(p.rekId));
+  if(last) return byId(last.rekId);
+  return L[0]||null;
+}
+
 function renderPayRows(prefix){
   currentPayPrefix=prefix;
   const id=prefix==='mesin'?'m-pay-list':'s-pay-list';
@@ -2408,7 +2514,7 @@ function renderPayRows(prefix){
       <td><input type="date" value="${p.tgl||''}" onchange="payRows[${i}].tgl=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:96px"></td>
       <td><input type="number" value="${p.jumlah||''}" onchange="payRows[${i}].jumlah=Number(this.value)" oninput="payRows[${i}].jumlah=Number(this.value);calcArAuto_(currentPayPrefix);updatePayTax_(${i})" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:100px"></td>
       <td class="tax-col tax-val" id="paytax-dpp-${i}">${taxCell_(p.jumlah,'dpp')}</td><td class="tax-col tax-val" id="paytax-ppn-${i}">${taxCell_(p.jumlah,'ppn')}</td>
-      <td><input type="text" value="${p.rek||''}" onchange="payRows[${i}].rek=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:72px"></td>
+      <td>${rekSelect_(p,i)}</td>
       <td><input type="text" value="${escAttr_(p.ket||'')}" placeholder="Note" onchange="payRows[${i}].ket=this.value" oninput="payRows[${i}].ket=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:96px"></td>
       ${buktiCell_(p,i,prefix)}
       <td><button onclick="removePayRow(${i},'${prefix}')" style="background:#fdecea;border:none;color:#e74c3c;padding:3px 7px;border-radius:4px;cursor:pointer;font-size:11px">✕</button></td>
@@ -4250,6 +4356,33 @@ function buildInvoiceDoc_(id, type, payIdx){
     sums.forEach(s=>{ rowsXml+=invFill_(s.bold?T.SUMB:T.SUMN,{LABEL:invEsc_(s.label),AMT:s.txt}); });
     rowsXml+=T.SPACER+invFill_(T.TOTAL,{AMT:totalTxt});
 
+    const rekI=invoiceRek_(r,sel);
+    // Blok rekening: rata kiri (tanpa tab di depan), sesuai contoh
+    ['@@BANK@@','No. Rek. ','@@ATASNAMA@@'].forEach(m=>{
+      const k=xml.indexOf(m); if(k<0) return;
+      const ps=xml.lastIndexOf('<w:p>',k)>xml.lastIndexOf('<w:p ',k)?xml.lastIndexOf('<w:p>',k):xml.lastIndexOf('<w:p ',k);
+      const pe=xml.indexOf('</w:p>',k);
+      const para=xml.slice(ps,pe).replace(/<w:r>(<w:rPr>(?:(?!<\/w:rPr>)[\s\S])*<\/w:rPr>)?<w:tab\/><\/w:r>/,'').replace('<w:tab/><w:t','<w:t');
+      xml=xml.slice(0,ps)+para+xml.slice(pe);
+    });
+    // Kepala invoice: blok "From" & "Bill To" masing-masing satu sel, supaya alamat customer
+    // yang panjang tidak memisahkan Email/Web dari alamat kantor.
+    (()=>{
+      const k=xml.indexOf('@@CUSTOMER@@'); if(k<0) return;
+      const ts=xml.lastIndexOf('<w:tbl>',k), te=xml.indexOf('</w:tbl>',k); if(ts<0||te<0) return;
+      const tbl=xml.slice(ts,te);
+      const rows=tbl.match(/<w:tr[ >][\s\S]*?<\/w:tr>/g)||[]; if(rows.length<2) return;
+      const cellsOf=row=>row.match(/<w:tc>[\s\S]*?<\/w:tc>/g)||[];
+      const first=cellsOf(rows[0]); if(first.length<2) return;
+      const merged=first.map((c,ci)=>{
+        const head=c.slice(0,c.indexOf('</w:tcPr>')+9);
+        const body=rows.map(rw=>{ const cc=cellsOf(rw)[ci]||''; const a2=cc.indexOf('</w:tcPr>'); return cc.slice(a2<0?5:a2+9,cc.length-7); }).join('');
+        return head+body+'</w:tc>';
+      });
+      const trOpen=rows[0].match(/^<w:tr[^>]*>/)[0];
+      const newTbl=tbl.slice(0,tbl.indexOf(rows[0]))+trOpen+merged.join('')+'</w:tr>'+tbl.slice(tbl.indexOf(rows[rows.length-1])+rows[rows.length-1].length);
+      xml=xml.slice(0,ts)+newTbl+xml.slice(te);
+    })();
     const a=xml.indexOf('<!--ROWS-->'), b=xml.indexOf('<!--/ROWS-->');
     if(a<0||b<0) throw new Error('Template tabel tidak ditemukan');
     xml=xml.slice(0,a)+rowsXml+xml.slice(b+'<!--/ROWS-->'.length);
@@ -4260,9 +4393,9 @@ function buildInvoiceDoc_(id, type, payIdx){
       NPWP:invText_(npwp||'-'),
       NOINV:invText_((perPay?sel.noInv:r.noInv)||'-'),
       TGL:fmtTglInvoice_(perPay?(sel.tgl||r.tglInv||r.tglPO):(r.tglInv||r.tglPO)),
-      BANK:invText_(pt.bankNama||'Bank BCA'),
-      NOREK:invText_(pt.bankNoRek||'-'),
-      ATASNAMA:invText_(pt.bankAtasNama||''),
+      BANK:invText_(rekI?rekI.bank||'-':(pt.bankNama||'Bank BCA')),
+      NOREK:invText_(rekI?rekI.norek||'-':(pt.bankNoRek||'-')),
+      ATASNAMA:invText_(rekI?rekI.nama||'':(pt.bankAtasNama||'')),
       TTDNAMA:invText_(pt.ttdNama||'Ashley'),
       TTDJAB:invText_(pt.ttdJabatan||'Finance')
     });
@@ -4271,13 +4404,21 @@ function buildInvoiceDoc_(id, type, payIdx){
     docFile.content=bytes; docFile.size=bytes.length;
     // Footer: transaksi sales wilayah Cikarang (Yoan, Riswandi, dst.) memakai alamat kantor Cikarang
     const salesRec=db.sales.find(x=>x.id===r.salesId);
-    if(salesRec && /cikarang/i.test(String(salesRec.kota||''))){
+    {
       const fIdx=zip.FullPaths.indexOf('Root Entry/word/footer1.xml');
       if(fIdx>-1){
         const fFile=zip.FileIndex[fIdx];
         let fx=new TextDecoder('utf-8').decode(new Uint8Array(fFile.content));
-        fx=fx.replace('Green Sedayu Bizpark Daan Mogot Blok DM 1 No. 9 Kalideres',
-          'DELTA SILICON 3, Kawasan Industri Lippo Cikarang Jl. Trembesi Blok F19-9AA, Cicau, Kec. Cikarang Pusat, Kabupaten Bekasi, Jawa Barat 17531');
+        if(salesRec && /cikarang/i.test(String(salesRec.kota||'')))
+          fx=fx.replace('Green Sedayu Bizpark Daan Mogot Blok DM 1 No. 9 Kalideres',
+            'DELTA SILICON 3, Kawasan Industri Lippo Cikarang Jl. Trembesi Blok F19-9AA, Cicau, Kec. Cikarang Pusat, Kabupaten Bekasi, Jawa Barat 17531');
+        // Footer berwarna abu-abu #B2B2B2
+        fx=fx.replace(/<w:rPr>([\s\S]*?)<\/w:rPr>/g,(m0,inner)=>{
+          inner=inner.replace(/<w:color [^>]*\/>/g,'');
+          const after=inner.search(/<w:(spacing|w|kern|position|sz|szCs|highlight|u|effect|bdr|shd|fitText|vertAlign|rtl|cs|em|lang|eastAsianLayout|specVanish|oMath)[ \/>]/);
+          const c='<w:color w:val="B2B2B2"/>';
+          return '<w:rPr>'+(after<0?inner+c:inner.slice(0,after)+c+inner.slice(after))+'</w:rPr>';
+        });
         const fb=new TextEncoder().encode(fx); fFile.content=fb; fFile.size=fb.length;
       }
     }
