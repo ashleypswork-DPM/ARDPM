@@ -1114,7 +1114,7 @@ function payHasDP_(list){ return !!(list&&list[0]&&list[0].label==='DP'); }
 function payLabel_(i,hasDP){ return hasDP ? (i===0?'DP':'Pembayaran '+i) : 'Pembayaran '+(i+1); }
 function labelPayments_(list){
   const dp=payHasDP_(list);
-  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',fp:!!p.fp,tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||'',...(p.rekId?{rekId:p.rekId}:{}),...(p.buktiId?{buktiId:p.buktiId,buktiUrl:p.buktiUrl||'',buktiName:p.buktiName||''}:{})}));
+  return (list||[]).map((p,i)=>({label:payLabel_(i,dp),noInv:p.noInv||'',fp:!!p.fp,tgl:p.tgl||'',jumlah:Number(p.jumlah)||0,rek:p.rek||'',ket:p.ket||'',...(p.rekId?{rekId:p.rekId}:{}),...(p.tglTf?{tglTf:p.tglTf}:{}),...(p.buktiId?{buktiId:p.buktiId,buktiUrl:p.buktiUrl||'',buktiName:p.buktiName||''}:{})}));
 }
 // A/R = Total − (semua pembayaran + PPh Jasa + Biaya Admin), dihitung kalau History Pembayaran
 // sudah berisi angka. Status otomatis LUNAS kalau sudah tertutup penuh.
@@ -2044,15 +2044,15 @@ async function showPayDetail(id,type){
   const r=(type==='mesin'?db.mesin:db.spare).find(x=>x.id===id);
   if(!r) return;
   let h=`<p class="text-sm" style="margin-bottom:12px">Barang: <b>${r.barang}</b></p>
-    <table class="pay-list"><thead><tr><th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Note</th><th>Bukti</th></tr></thead><tbody>`;
+    <table class="pay-list"><thead><tr><th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah</th><th>Rekening</th><th>Note</th><th>Tgl Transfer</th><th>Bukti</th></tr></thead><tbody>`;
   if(r.payments&&r.payments.length){
     for(const [i,p] of r.payments.entries()){
       const buktiHtml=payVerified_(p)
         ?`<button class="bukti-view" onclick="viewBukti_('${p.buktiId}')">📷 Lihat</button>`
         :`<span class="bukti-none">Belum ada bukti</span>`;
-      h+=`<tr><td class="pay-label">${payLabel_(i,payHasDP_(r.payments))}</td><td>${escAttr_(p.noInv)||'-'}</td><td class="fp-td">${p.fp?'<b style="color:var(--lunas)">✓</b>':'<span style="color:#c62828">✗</span>'}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td>${buktiHtml}</td></tr>`;
+      h+=`<tr><td class="pay-label">${payLabel_(i,payHasDP_(r.payments))}</td><td>${escAttr_(p.noInv)||'-'}</td><td class="fp-td">${p.fp?'<b style="color:var(--lunas)">✓</b>':'<span style="color:#c62828">✗</span>'}</td><td>${fmtDate(p.tgl)}</td><td class="currency">${fmt(p.jumlah)}</td><td>${p.rek||'-'}</td><td>${p.ket||'-'}</td><td style="white-space:nowrap">${fmtDate(p.tglTf)}</td><td>${buktiHtml}</td></tr>`;
     }
-  } else h+=`<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Belum ada history</td></tr>`;
+  } else h+=`<tr><td colspan="9" style="text-align:center;padding:20px;color:#999">Belum ada history</td></tr>`;
   h+=`</tbody></table>`;
   if((r.planned||[]).length){
     h+=`<p class="text-sm" style="margin:14px 0 4px;color:#c62828;font-weight:700">Rencana Pembayaran</p>
@@ -2503,7 +2503,7 @@ function renderPayRows(prefix){
   const id=prefix==='mesin'?'m-pay-list':'s-pay-list';
   const el=document.getElementById(id); if(!el) return;
   let h=`<table class="pay-list pay-edit ${hasNpwp_(prefix)?'with-tax':''}"><thead><tr>
-    <th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah (Rp)</th><th class="tax-col">DPP</th><th class="tax-col">PPN 11%</th><th>Rekening</th><th>Note</th><th>Bukti</th><th></th>
+    <th>Pembayaran</th><th>No Invoice</th><th class="fp-th">FP</th><th>Tanggal</th><th>Jumlah (Rp)</th><th class="tax-col">DPP</th><th class="tax-col">PPN 11%</th><th>Rekening</th><th>Note</th><th>Tgl Transfer</th><th>Bukti</th><th></th>
   </tr></thead><tbody>`;
   payRows.forEach((p,i)=>{
     const hasImg=p._imgPreview||p._hasImg;
@@ -2516,6 +2516,7 @@ function renderPayRows(prefix){
       <td class="tax-col tax-val" id="paytax-dpp-${i}">${taxCell_(p.jumlah,'dpp')}</td><td class="tax-col tax-val" id="paytax-ppn-${i}">${taxCell_(p.jumlah,'ppn')}</td>
       <td>${rekSelect_(p,i)}</td>
       <td><input type="text" value="${escAttr_(p.ket||'')}" placeholder="Note" onchange="payRows[${i}].ket=this.value" oninput="payRows[${i}].ket=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:96px"></td>
+      <td><input type="date" value="${p.tglTf||''}" onchange="payRows[${i}].tglTf=this.value" title="Tanggal transfer" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:118px"></td>
       ${buktiCell_(p,i,prefix)}
       <td><button onclick="removePayRow(${i},'${prefix}')" style="background:#fdecea;border:none;color:#e74c3c;padding:3px 7px;border-radius:4px;cursor:pointer;font-size:11px">✕</button></td>
     </tr>`;
