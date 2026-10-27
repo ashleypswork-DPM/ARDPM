@@ -480,6 +480,7 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
         <button class="btn-sidebar side-child" onclick="openFixPpn()">🛠️ Perbaiki PPN Manual</button>
         <button class="btn-sidebar side-child" onclick="openStatusCheck()">🔎 Cek Status &amp; A/R</button>
         <button class="btn-sidebar side-child" onclick="openRekening()">🏦 Rekam Rekening</button>
+        <button class="btn-sidebar side-child" onclick="openCustomers()">👥 Database Customer</button>
         <button class="btn-sidebar side-child" onclick="openImportModal()">📥 Import dari Excel</button>
       </div>
     </div>
@@ -744,6 +745,36 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-rekening')">Tutup</button></div>
   </div>
 </div>
+<datalist id="cust-dl"></datalist>
+<!-- MODAL: DATABASE CUSTOMER -->
+<div class="modal-overlay" id="modal-customer" style="z-index:2000">
+  <div class="modal" style="max-width:1100px">
+    <div class="modal-header"><h3>👥 Database Customer</h3><button class="modal-close" onclick="closeModal('modal-customer')">×</button></div>
+    <div class="modal-body">
+      <div id="cust-seed"></div>
+      <div class="bk-form" id="cu-form">
+        <div class="bk-form-title" id="cu-form-title">Tambah Customer</div>
+        <div class="form-grid" style="grid-template-columns:1.4fr 1fr 1fr 1fr;">
+          <div class="form-group"><label>Nama Customer</label><input type="text" id="cu-nama" placeholder="Contoh: PT CONTOH JAYA"></div>
+          <div class="form-group"><label>PIC Customer</label><input type="text" id="cu-pic" placeholder="Nama PIC"></div>
+          <div class="form-group"><label>No Telepon</label><input type="text" id="cu-telp" placeholder="08xx"></div>
+          <div class="form-group"><label>NPWP</label><input type="text" id="cu-npwp" placeholder="Kosongkan kalau tidak ada"></div>
+          <div class="form-group full" style="grid-column:1/-1"><label>Alamat Customer</label><textarea id="cu-alamat" placeholder="Alamat lengkap customer" style="min-height:52px"></textarea></div>
+        </div>
+        <div class="bk-actions">
+          <button class="btn btn-outline" id="cu-cancel" style="display:none" onclick="cuReset_()">Batal Edit</button>
+          <button class="btn btn-primary" id="cu-save" onclick="saveCustomer()">💾 Simpan Customer</button>
+        </div>
+      </div>
+      <div class="bk-toolbar"><input type="text" id="cu-search" placeholder="🔍 Cari nama / PIC / telp / NPWP..." oninput="renderCustomers()"><span class="bk-count" id="cu-count"></span></div>
+      <div class="bk-table-wrap"><table class="pay-list bk-table">
+        <thead><tr><th>No</th><th>Nama Customer</th><th>PIC</th><th>No Telepon</th><th>NPWP</th><th>Alamat</th><th>Transaksi</th><th></th></tr></thead>
+        <tbody id="cu-tbody"></tbody>
+      </table></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-customer')">Tutup</button></div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-invlist">
   <div class="modal modal-md">
     <div class="modal-header"><h3>🧾 Daftar No Invoice</h3><button class="modal-close" onclick="closeModal('modal-invlist')">×</button></div>
@@ -770,8 +801,9 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
         <div class="form-group"><label>No Invoice</label><input type="text" id="m-no-inv" placeholder="Contoh: 001/DPM/2026"></div>
         <div class="form-group"><label>Tanggal Invoice</label><input type="date" id="m-tgl-inv"></div>
         <div class="form-group"><label>Sales</label><input type="text" id="m-sales" placeholder="Nama Sales"></div>
-        <div class="form-group"><label>Customer</label><input type="text" id="m-customer" placeholder="Nama Customer" onchange="npwpFromCustomer_('mesin')"></div>
+        <div class="form-group"><label>Customer</label><input type="text" id="m-customer" placeholder="Pilih dari daftar atau ketik customer baru" list="cust-dl" autocomplete="off" oninput="fillFromCustomerDb_('mesin',false)" onchange="fillFromCustomerDb_('mesin',true)"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="m-pic" placeholder="Nama PIC"></div>
+        <div class="form-group"><label>No Telepon</label><input type="text" id="m-telp" placeholder="08xx"></div>
         <div class="form-group"><label>NPWP</label><input type="text" id="m-npwp" placeholder="Kosongkan kalau customer tidak ber-NPWP" oninput="onNpwpInput_('mesin')"><small class="field-hint">Kalau diisi, Daftar Barang &amp; History Pembayaran menampilkan DPP &amp; PPN (harga dianggap sudah termasuk PPN 11%).</small></div>
         <div class="form-group full"><label>Alamat Customer</label><textarea id="m-alamat" placeholder="Alamat lengkap customer"></textarea></div>
       </div>
@@ -831,8 +863,9 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
         <div class="form-group"><label>Tanggal Invoice</label><input type="date" id="s-tgl-inv"></div>
         <div class="form-group"><label>FP</label><input type="text" id="s-fp" placeholder="Contoh: DONE"></div>
         <div class="form-group"><label>PIC Handled</label><input type="text" id="s-pic-handled" placeholder="Nama PIC"></div>
-        <div class="form-group"><label>Customer</label><input type="text" id="s-customer" placeholder="Nama Customer" onchange="npwpFromCustomer_('spare')"></div>
+        <div class="form-group"><label>Customer</label><input type="text" id="s-customer" placeholder="Pilih dari daftar atau ketik customer baru" list="cust-dl" autocomplete="off" oninput="fillFromCustomerDb_('spare',false)" onchange="fillFromCustomerDb_('spare',true)"></div>
         <div class="form-group"><label>PIC Customer</label><input type="text" id="s-pic" placeholder="Nama PIC"></div>
+        <div class="form-group"><label>No Telepon</label><input type="text" id="s-telp" placeholder="08xx"></div>
         <div class="form-group"><label>NPWP</label><input type="text" id="s-npwp" placeholder="Kosongkan kalau customer tidak ber-NPWP" oninput="onNpwpInput_('spare')"><small class="field-hint">Kalau diisi, Daftar Barang &amp; History Pembayaran menampilkan DPP &amp; PPN (harga dianggap sudah termasuk PPN 11%).</small></div>
         <div class="form-group full"><label>Alamat Customer</label><textarea id="s-alamat" placeholder="Alamat lengkap customer"></textarea></div>
         <div class="form-group"><label>Jenis</label><select id="s-jenis"><option value="Sparepart">Sparepart</option><option value="Jasa">Jasa</option></select></div>
@@ -1052,7 +1085,7 @@ function setSyncStatus(text){
 // ter-tulis di URL (browser history / server access log).
 // Code.gs yang terpasang (deployment /exec) masih versi lama -> Booking Nomor Invoice,
 // NPWP, dll. TIDAK ikut tersimpan ke Sheets. Tampilkan peringatan supaya kelihatan.
-const API_VERSION_NEEDED=6;
+const API_VERSION_NEEDED=7;
 let oldServerWarned_=false;
 function warnOldServer_(result){
   if(result && Number(result.apiVersion)>=API_VERSION_NEEDED) return false;
@@ -1077,10 +1110,12 @@ async function pullFromSheets(){
       const parsed = JSON.parse(result.data);
       const localInv = Array.isArray(db && db.invBook) ? db.invBook : [];
       const localRek = Array.isArray(db && db.rekening) ? db.rekening : [];
+      const localCust = Array.isArray(db && db.customers) ? db.customers : [];
       db = { ...DEFAULT_DB, ...parsed };
       // Code.gs versi lama belum mengirim invBook -> pakai booking yang tersimpan lokal
       if(!Array.isArray(parsed.invBook)) db.invBook = localInv;
       if(!Array.isArray(parsed.rekening)) db.rekening = localRek;
+      if(!Array.isArray(parsed.customers)) db.customers = localCust;
       if(!db.ptInfo) db.ptInfo = DEFAULT_DB.ptInfo;
       if(!db.locations) db.locations = DEFAULT_DB.locations;
       if(!db.locationIcons) db.locationIcons = DEFAULT_DB.locationIcons;
@@ -2498,6 +2533,155 @@ function invoiceRek_(r,sel){
   return L[0]||null;
 }
 
+// ═══════════════════════════════════════════════════════
+// DATABASE CUSTOMER (Alat Bantu) — dipakai di form Mesin/Sparepart, Booking & Invoice
+// db.customers = [{id, nama, pic, telp, npwp, alamat}]
+// ═══════════════════════════════════════════════════════
+let cuEditingId=null;
+function custList_(){ if(!Array.isArray(db.customers)) db.customers=[]; return db.customers; }
+function custKey_(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,''); }
+function findCust_(name){
+  const t=String(name||'').trim().toLowerCase(); if(!t) return null;
+  const L=custList_(), k=custKey_(name);
+  return L.find(c=>String(c.nama||'').trim().toLowerCase()===t) || (k?L.find(c=>custKey_(c.nama)===k):null) || null;
+}
+function custTrxOf_(c){ const k=custKey_(c.nama); return [...(db.mesin||[]),...(db.spare||[])].filter(r=>k&&custKey_(r.customer)===k); }
+function refreshCustDatalist_(){
+  const dl=document.getElementById('cust-dl'); if(!dl) return;
+  let L=custList_().map(c=>({v:c.nama,l:[c.pic,c.telp].filter(Boolean).join(' · ')}));
+  if(!L.length){ const m=new Map(); [...(db.mesin||[]),...(db.spare||[])].forEach(r=>{ const n=String(r.customer||'').trim(); if(n&&!m.has(n.toLowerCase())) m.set(n.toLowerCase(),{v:n,l:r.pic||''}); }); L=[...m.values()]; }
+  L.sort((a,b)=>a.v.localeCompare(b.v,'id',{sensitivity:'base'}));
+  dl.innerHTML=L.map(x=>`<option value="${escAttr_(x.v)}">${escAttr_(x.l)}</option>`).join('');
+}
+// Customer dipilih / diketik di form: isi PIC, No Telepon, NPWP & Alamat dari database
+function fillFromCustomerDb_(prefix,isChange){
+  const px=prefix==='mesin'?'m':'s', el=document.getElementById(px+'-customer');
+  const c=findCust_(el.value);
+  if(!c){ if(isChange) npwpFromCustomer_(prefix); return; }
+  if(el.dataset.filledFor===c.id && !isChange) return;
+  el.dataset.filledFor=c.id;
+  [['pic','pic'],['telp','telp'],['npwp','npwp'],['alamat','alamat']].forEach(([f,k])=>{ if(c[k]) document.getElementById(px+'-'+f).value=c[k]; });
+  onNpwpInput_(prefix);
+}
+// Setelah Simpan transaksi: customer baru -> tawarkan simpan ke Database Customer
+async function offerSaveCustomer_(r){
+  if(!r) return;
+  const nama=String(r.customer||'').trim(); if(!nama || findCust_(nama)) return;
+  await new Promise(ok=>setTimeout(ok,250));
+  if(!confirm(`"${nama}" belum ada di Database Customer.\nSimpan sekarang (beserta PIC, No Telepon, NPWP & Alamat-nya), supaya lain kali tinggal dipilih?`)) return;
+  custList_().push({id:uid(),nama,pic:r.pic||'',telp:r.telp||'',npwp:r.npwp||'',alamat:r.alamat||''});
+  await saveData(); refreshCustDatalist_(); toast(`${nama} disimpan ke Database Customer`);
+}
+function openCustomers(){ closeSidebarMobile(); cuReset_(); document.getElementById('cu-search').value=''; renderCustSeed_(); renderCustomers(); openModal('modal-customer'); }
+function cuReset_(){
+  cuEditingId=null;
+  ['cu-nama','cu-pic','cu-telp','cu-npwp','cu-alamat'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('cu-form-title').textContent='Tambah Customer';
+  document.getElementById('cu-save').innerHTML='💾 Simpan Customer';
+  document.getElementById('cu-cancel').style.display='none';
+  document.getElementById('cu-form').classList.remove('editing');
+}
+function renderCustomers(){
+  const q=String(document.getElementById('cu-search').value||'').trim().toLowerCase();
+  const all=[...custList_()].sort((a,b)=>String(a.nama).localeCompare(String(b.nama),'id',{sensitivity:'base'}));
+  const list=q?all.filter(c=>[c.nama,c.pic,c.telp,c.npwp,c.alamat].some(v=>String(v||'').toLowerCase().includes(q))):all;
+  document.getElementById('cu-count').textContent=q?`${list.length} dari ${all.length} customer`:`${all.length} customer`;
+  const tb=document.getElementById('cu-tbody');
+  if(!list.length){ tb.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">${all.length?'Tidak ada yang cocok':'Belum ada customer di database'}</td></tr>`; return; }
+  tb.innerHTML=list.map((c,i)=>`<tr><td class="bk-no">${i+1}</td><td><b>${escAttr_(c.nama)}</b></td><td>${escAttr_(c.pic)||'-'}</td><td>${escAttr_(c.telp)||'-'}</td><td>${escAttr_(c.npwp)||'-'}</td>
+    <td style="max-width:240px;white-space:normal;font-size:10.5px">${escAttr_(c.alamat)||'-'}</td><td>${custTrxOf_(c).length}</td>
+    <td style="white-space:nowrap"><button class="icon-btn" title="Edit" onclick="editCustomer('${c.id}')">✏️</button><button class="icon-btn del" title="Hapus" onclick="requireAuth(deleteCustomer,'${c.id}')">🗑️</button></td></tr>`).join('');
+}
+function editCustomer(id){
+  const c=custList_().find(x=>x.id===id); if(!c) return;
+  cuEditingId=id;
+  document.getElementById('cu-nama').value=c.nama||''; document.getElementById('cu-pic').value=c.pic||''; document.getElementById('cu-telp').value=c.telp||'';
+  document.getElementById('cu-npwp').value=c.npwp||''; document.getElementById('cu-alamat').value=c.alamat||'';
+  document.getElementById('cu-form-title').textContent='Edit Customer';
+  document.getElementById('cu-save').innerHTML='💾 Simpan Perubahan';
+  document.getElementById('cu-cancel').style.display='';
+  document.getElementById('cu-form').classList.add('editing');
+  document.querySelector('#modal-customer .modal').scrollTop=0;
+}
+async function saveCustomer(){
+  const v=id=>document.getElementById(id).value.trim();
+  const rec={nama:v('cu-nama'),pic:v('cu-pic'),telp:v('cu-telp'),npwp:v('cu-npwp'),alamat:v('cu-alamat')};
+  if(!rec.nama){ toast('Nama Customer wajib diisi','error'); return; }
+  const dup=custList_().find(c=>c.id!==cuEditingId && String(c.nama).trim().toLowerCase()===rec.nama.toLowerCase());
+  if(dup){ toast(`"${rec.nama}" sudah ada di database`,'error'); return; }
+  let applied=0;
+  if(cuEditingId){
+    const c=custList_().find(x=>x.id===cuEditingId);
+    const oldName=c.nama, oldKey=custKey_(oldName);
+    // Transaksi & booking lama customer ini yang datanya berbeda -> tanya dulu
+    const trx=[...(db.mesin||[]),...(db.spare||[])].filter(r=>custKey_(r.customer)===oldKey);
+    const differ=trx.filter(r=>(rec.nama!==String(r.customer||'').trim())||['pic','telp','npwp','alamat'].some(k=>rec[k]&&rec[k]!==String(r[k]||'')));
+    Object.assign(c,rec);
+    if(differ.length && confirm(`Terapkan juga perubahan data "${rec.nama}" ke ${differ.length} transaksi yang sudah ada?\n(Nama, PIC, No Telepon, NPWP & Alamat di transaksi tersebut akan diperbarui. Kolom yang kosong di database tidak mengubah isian transaksi.)\n\nOK = terapkan · Batal = hanya simpan di database`)){
+      differ.forEach(r=>{ r.customer=rec.nama; ['pic','telp','npwp','alamat'].forEach(k=>{ if(rec[k]) r[k]=rec[k]; }); });
+      invBook_().forEach(b=>{ if(custKey_(b.customer)===oldKey){ b.customer=rec.nama; if(rec.pic) b.pic=rec.pic; if(rec.telp) b.telp=rec.telp; } });
+      applied=differ.length;
+    }
+  } else custList_().push({id:uid(),...rec});
+  await saveData(); refreshCustDatalist_();
+  toast(cuEditingId?(applied?`Customer diperbarui · ${applied} transaksi ikut disesuaikan`:'Customer diperbarui'):'Customer disimpan');
+  cuReset_(); renderCustomers();
+  if(applied){ renderSidebar(); if(currentSalesId) renderMain(); else renderLanding(); }
+}
+async function deleteCustomer(id){
+  const c=custList_().find(x=>x.id===id); if(!c) return;
+  if(!confirm(`Hapus "${c.nama}" dari Database Customer?\nTransaksinya tidak ikut terhapus.`)) return;
+  db.customers=custList_().filter(x=>x.id!==id);
+  await saveData(); refreshCustDatalist_(); renderCustomers(); toast('Customer dihapus dari database');
+}
+// ── Isi awal otomatis dari transaksi & booking yang sudah ada ──
+let custSeedGroups_=[];
+function buildCustSeed_(){
+  const groups=new Map();
+  const src=[...(db.mesin||[]),...(db.spare||[])].map(r=>({nama:r.customer,pic:r.pic,telp:r.telp,npwp:r.npwp,alamat:r.alamat,d:r.tglPO||''}))
+    .concat(invBook_().map(b=>({nama:b.customer,pic:b.pic,telp:b.telp,d:b.tglInv||''})))
+    .filter(x=>String(x.nama||'').trim()).sort((a,b)=>String(b.d).localeCompare(String(a.d)));
+  src.forEach(x=>{
+    const k=custKey_(x.nama); if(!k) return;
+    if(!groups.has(k)) groups.set(k,{key:k,variants:new Map(),pic:'',telp:'',npwp:'',alamat:''});
+    const g=groups.get(k), n=String(x.nama).trim();
+    g.variants.set(n,(g.variants.get(n)||0)+1);
+    ['pic','telp','npwp','alamat'].forEach(f=>{ if(!g[f]&&x[f]) g[f]=String(x[f]).trim(); });
+  });
+  return [...groups.values()].map(g=>({...g,variants:[...g.variants.entries()].sort((a,b)=>b[1]-a[1])})).sort((a,b)=>a.variants[0][0].localeCompare(b.variants[0][0],'id',{sensitivity:'base'}));
+}
+function renderCustSeed_(){
+  const box=document.getElementById('cust-seed');
+  if(custList_().length){ box.innerHTML=''; return; }
+  custSeedGroups_=buildCustSeed_();
+  if(!custSeedGroups_.length){ box.innerHTML=''; return; }
+  const mirip=custSeedGroups_.filter(g=>g.variants.length>1);
+  let h=`<div class="fix-skip" style="background:#eef6ff;border-color:#bcd8f5;color:#1a3a5c;margin:0 0 12px">
+    <b>Database Customer masih kosong.</b> Ditemukan <b>${custSeedGroups_.length} customer</b> dari transaksi &amp; booking yang sudah ada. PIC, No Telepon, NPWP &amp; Alamat diambil dari transaksi terbaru masing-masing customer.`;
+  if(mirip.length){
+    h+=`<br><br><b>${mirip.length} customer punya penulisan nama yang mirip.</b> Pilih nama yang dipakai, atau "Pisahkan" kalau memang customer berbeda:<div style="margin-top:6px">`;
+    mirip.forEach(g=>{ const gi=custSeedGroups_.indexOf(g);
+      h+=`<div style="margin:4px 0;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:11px;color:#555">${g.variants.map(([n,c])=>`"${escAttr_(n)}" (${c})`).join(' · ')}</span>
+        <select class="seed-sel" data-g="${gi}" style="padding:4px;border-radius:5px;border:1px solid #bcd8f5;font-size:11px">${g.variants.map(([n])=>`<option value="${escAttr_(n)}">Gabung jadi: ${escAttr_(n)}</option>`).join('')}<option value="__split__">Pisahkan (customer berbeda)</option></select></div>`; });
+    h+=`</div>`;
+  }
+  h+=`<div style="margin-top:10px"><button class="btn btn-primary" onclick="applyCustSeed_()">👥 Buat Database dari Data yang Ada</button></div></div>`;
+  box.innerHTML=h;
+}
+async function applyCustSeed_(){
+  const choice={}; document.querySelectorAll('.seed-sel').forEach(s=>{ choice[s.dataset.g]=s.value; });
+  const out=[];
+  custSeedGroups_.forEach((g,gi)=>{
+    const base={pic:g.pic,telp:g.telp,npwp:g.npwp,alamat:g.alamat};
+    const ch=choice[gi];
+    if(ch==='__split__') g.variants.forEach(([n])=>out.push({id:uid(),nama:n,...base}));
+    else out.push({id:uid(),nama:ch||g.variants[0][0],...base});
+  });
+  db.customers=out;
+  await saveData(); refreshCustDatalist_(); renderCustSeed_(); renderCustomers();
+  toast(`${out.length} customer masuk ke Database Customer`);
+}
+
 function renderPayRows(prefix){
   currentPayPrefix=prefix;
   const id=prefix==='mesin'?'m-pay-list':'s-pay-list';
@@ -2769,10 +2953,11 @@ function calcMesinTotal(){
   calcArAuto_('mesin');
 }
 function openAddMesin(){
+  refreshCustDatalist_(); delete document.getElementById('m-customer').dataset.filledFor;
   editOrigTotal_=null;
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-mesin-title').textContent='Tambah Penjualan Mesin';
-  ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-npwp','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
+  ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-telp','m-npwp','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
   ['m-dpp','m-ppn','m-discount','m-total','m-ar','m-pph','m-admin'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-status').value='BELUM';
   document.getElementById('m-pph').value=0;
@@ -2784,6 +2969,7 @@ function openAddMesin(){
   renderPayRows('mesin'); openModal('modal-mesin');
 }
 async function editMesin(id){
+  refreshCustDatalist_(); delete document.getElementById('m-customer').dataset.filledFor;
   const r=db.mesin.find(m=>m.id===id); if(!r) return;
   editingId=id;
   // Load image previews for existing pay rows
@@ -2808,6 +2994,7 @@ async function editMesin(id){
   document.getElementById('m-customer').value=r.customer||'';
   document.getElementById('m-pic').value=r.pic||'';
   document.getElementById('m-npwp').value=r.npwp||'';
+  document.getElementById('m-telp').value=r.telp||'';
   document.getElementById('m-alamat').value=r.alamat||'';
   document.getElementById('m-ppn').value=r.ppn||'';
   editOrigTotal_=Number(r.total)||0;
@@ -2835,7 +3022,7 @@ async function saveMesin(){
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
-  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,npwp:document.getElementById('m-npwp').value.trim(),alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:formDpp_('mesin'),ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,admin:Number(document.getElementById('m-admin').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,npwp:document.getElementById('m-npwp').value.trim(),telp:document.getElementById('m-telp').value.trim(),alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:formDpp_('mesin'),ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,admin:Number(document.getElementById('m-admin').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
@@ -2853,6 +3040,7 @@ async function saveMesin(){
   }
   await saveData();closeModal('modal-mesin');renderSidebar();renderMain();
   syncBuktiFiles_(db.mesin.find(m=>m.id===finalId), oldPaysM);
+  offerSaveCustomer_(db.mesin.find(m=>m.id===finalId));
   toast('Data mesin disimpan');
 }
 async function deleteMesin(id){
@@ -2880,10 +3068,11 @@ function calcSpareTotal(){
   calcArAuto_('spare');
 }
 function openAddSpare(){
+  refreshCustDatalist_(); delete document.getElementById('s-customer').dataset.filledFor;
   editOrigTotal_=null;
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-spare-title').textContent='Tambah Penjualan Spareparts';
-  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-fp','s-pic-handled','s-customer','s-pic','s-npwp','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
+  ['s-tgl-po','s-no-po','s-no-inv','s-tgl-inv','s-fp','s-pic-handled','s-customer','s-pic','s-telp','s-npwp','s-alamat','s-ket','s-jadwal-pay','s-tgl-kirim','s-tgl-pasang'].forEach(id=>document.getElementById(id).value='');
   ['s-dpp','s-ppn','s-discount','s-total','s-ar','s-pph','s-admin'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('s-status').value='BELUM';
   document.getElementById('s-pph').value=0;
@@ -2896,6 +3085,7 @@ function openAddSpare(){
   renderPayRows('spare');openModal('modal-spare');
 }
 async function editSpare(id){
+  refreshCustDatalist_(); delete document.getElementById('s-customer').dataset.filledFor;
   const r=db.spare.find(m=>m.id===id); if(!r) return;
   editingId=id;
   payRows=await Promise.all((r.payments||[]).map(async(p,i)=>{
@@ -2916,6 +3106,7 @@ async function editSpare(id){
   document.getElementById('s-customer').value=r.customer||'';
   document.getElementById('s-pic').value=r.pic||'';
   document.getElementById('s-npwp').value=r.npwp||'';
+  document.getElementById('s-telp').value=r.telp||'';
   document.getElementById('s-alamat').value=r.alamat||'';
   document.getElementById('s-jenis').value=r.jenis||'Sparepart';
   document.getElementById('s-ppn').value=r.ppn||'';
@@ -2945,7 +3136,7 @@ async function saveSpare(){
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
   const aggHarga=cleanItems.length?cleanItems[0].harga:0;
-  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,fp:document.getElementById('s-fp').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,npwp:document.getElementById('s-npwp').value.trim(),alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:formDpp_('spare'),ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,admin:Number(document.getElementById('s-admin').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('s-tgl-po').value,noPO:document.getElementById('s-no-po').value,noInv:document.getElementById('s-no-inv').value,tglInv:document.getElementById('s-tgl-inv').value,fp:document.getElementById('s-fp').value,picHandled:document.getElementById('s-pic-handled').value,customer:document.getElementById('s-customer').value,pic:document.getElementById('s-pic').value,npwp:document.getElementById('s-npwp').value.trim(),telp:document.getElementById('s-telp').value.trim(),alamat:document.getElementById('s-alamat').value,barang:aggBarang,jenis:document.getElementById('s-jenis').value,qty:aggQty,seri:aggSeri,harga:aggHarga,items:cleanItems,dpp:formDpp_('spare'),ppn:Number(document.getElementById('s-ppn').value)||0,discount:Number(document.getElementById('s-discount').value)||0,pph:Number(document.getElementById('s-pph').value)||0,admin:Number(document.getElementById('s-admin').value)||0,total:Number(document.getElementById('s-total').value)||0,status:document.getElementById('s-status').value,jadwalPay:document.getElementById('s-jadwal-pay').value,tglKirim:document.getElementById('s-tgl-kirim').value,tglPasang:document.getElementById('s-tgl-pasang').value,ket:document.getElementById('s-ket').value,ar:Number(document.getElementById('s-ar').value)||0};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
@@ -2959,6 +3150,7 @@ async function saveSpare(){
   }
   await saveData();closeModal('modal-spare');renderSidebar();renderMain();
   syncBuktiFiles_(db.spare.find(m=>m.id===finalId), oldPaysS);
+  offerSaveCustomer_(db.spare.find(m=>m.id===finalId));
   toast('Data sparepart disimpan');
 }
 async function deleteSpare(id){
@@ -3113,7 +3305,7 @@ function bkJenisCanon_(v){
 // Daftar customer untuk dropdown: dari booking + dari transaksi Mesin/Sparepart (unik, A-Z)
 function bkCustomers_(){
   const m=new Map();
-  [...invBook_(),...(db.mesin||[]),...(db.spare||[])].forEach(r=>{
+  [...custList_().map(c=>({customer:c.nama})),...invBook_(),...(db.mesin||[]),...(db.spare||[])].forEach(r=>{
     const c=String(r.customer||'').trim(); if(c && !m.has(c.toLowerCase())) m.set(c.toLowerCase(),c);
   });
   return [...m.values()].sort((a,b)=>a.localeCompare(b,'id',{sensitivity:'base'}));
@@ -3170,7 +3362,7 @@ function bkResetForm_(){
 function bkFillFromCust_(){
   if(bkEditingId) return;
   const c=document.getElementById('bk-cust').value.trim().toLowerCase(); if(!c) return;
-  const last=[...invBook_()].sort((a,b)=>(Number(b.no)||0)-(Number(a.no)||0)).find(b=>String(b.customer||'').trim().toLowerCase()===c);
+  const last=[...invBook_()].sort((a,b)=>(Number(b.no)||0)-(Number(a.no)||0)).find(b=>String(b.customer||'').trim().toLowerCase()===c)||findCust_(c);
   if(!last) return;
   const pic=document.getElementById('bk-pic'), tel=document.getElementById('bk-telp');
   if(!pic.value&&last.pic) pic.value=last.pic;
@@ -4401,6 +4593,14 @@ function buildInvoiceDoc_(id, type, payIdx){
       const trOpen=rows[0].match(/^<w:tr[^>]*>/)[0];
       const newTbl=tbl.slice(0,tbl.indexOf(rows[0]))+trOpen+merged.join('')+'</w:tr>'+tbl.slice(tbl.indexOf(rows[rows.length-1])+rows[rows.length-1].length);
       xml=xml.slice(0,ts)+newTbl+xml.slice(te);
+    })();
+    // Bill To: baris "Telp : ..." di bawah PIC (dari transaksi, atau Database Customer)
+    (()=>{
+      const telp=String(r.telp||(findCust_(r.customer)||{}).telp||'').trim();
+      const k=xml.indexOf('@@PIC@@'); if(k<0||!telp) return;
+      const ps=Math.max(xml.lastIndexOf('<w:p>',k),xml.lastIndexOf('<w:p ',k)), pe=xml.indexOf('</w:p>',k)+6;
+      const para=xml.slice(ps,pe);
+      xml=xml.slice(0,pe)+para.replace('PIC : ','Telp : ').replace('@@PIC@@',invText_(telp))+xml.slice(pe);
     })();
     const a=xml.indexOf('<!--ROWS-->'), b=xml.indexOf('<!--/ROWS-->');
     if(a<0||b<0) throw new Error('Template tabel tidak ditemukan');
