@@ -4551,7 +4551,9 @@ function buildInvoiceDoc_(id, type, payIdx){
     // Customer ber-NPWP: angka pembayaran = DPP (Jumlah/1,11) dan PPN = DPP x 11% dari pembayaran yang dipilih.
     // Tanpa NPWP: angka pembayaran penuh, PPN tidak dipisah.
     const npwp=String(r.npwp||'').trim();
-    const payAmt=p=>(perPay&&npwp)?taxSplit_(p.jumlah).dpp:(Number(p.jumlah)||0);
+    // Invoice per pembayaran (ber-NPWP): hanya pembayaran yang dipilih ditulis DPP-nya (PPN di baris PPN);
+    // pembayaran sebelumnya ditulis penuh (sudah termasuk PPN), sesuai yang sudah dibayar customer.
+    const payAmt=(p,i)=>(perPay&&npwp&&i===payIdx)?taxSplit_(p.jumlah).dpp:(Number(p.jumlah)||0);
     // Rincian: Discount, Total Harga, DP / PAY ..., PPN
     const sums=[];
     sums.push({label:'Discount',txt:discount>0?invNum_(discount):'-',bold:false});
@@ -4565,7 +4567,7 @@ function buildInvoiceDoc_(id, type, payIdx){
     pays.forEach((p,i)=>{
       if(i>lastIdx) return;
       const label=(hasDP&&i===0)?'DP':(perPay?'Pembayaran ':'PAY ')+invRoman_(hasDP?i:i+1);
-      sums.push({label,txt:invNum_(payAmt(p)),bold:i===lastIdx});
+      sums.push({label,txt:invNum_(payAmt(p,i)),bold:i===lastIdx});
     });
     const ppnTxt=perPay?(npwp&&Number(sel.jumlah)?invNum_(taxSplit_(sel.jumlah).ppn):'-'):(ppn>0?invNum_(ppn):'-');
     sums.push({label:'PPN',txt:ppnTxt,bold:true});
