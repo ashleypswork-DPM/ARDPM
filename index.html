@@ -4530,9 +4530,12 @@ function buildInvoiceDoc_(id, type, payIdx){
     T.SUMN=tabAmt(T.SUMN); T.SUMB=tabAmt(T.SUMB); T.TOTAL=tabAmt(T.TOTAL);
 
     // Baris barang: urut 1, 2, 3, ... beserta QTY, harga satuan, dan totalnya
+    // Customer ber-NPWP: Price/Unit & Total memakai DPP/Unit (sesuai Daftar Barang; barang Bebas PPN = harga apa adanya).
+    // Tanpa NPWP: Harga/Unit apa adanya.
+    const npwpRow=String(r.npwp||'').trim();
     let rowsXml='';
     items.forEach((it,i)=>{
-      const qty=Number(it.qty)||0, harga=Number(it.harga)||0;
+      const qty=Number(it.qty)||0, harga=npwpRow?itemSplit_(it).dpp:(Number(it.harga)||0);
       rowsXml+=invFill_(T.ITEM,{NO:String(i+1),BARANG:invText_(it.barang||'-'),QTY:invNum_(qty),HARGA:'Rp '+invNum_(harga),SUB:'Rp   '+invNum_(qty*harga)});
     });
     // Note: harga (Total) sudah / belum termasuk PPN
