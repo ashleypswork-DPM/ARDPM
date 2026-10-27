@@ -4557,7 +4557,10 @@ function buildInvoiceDoc_(id, type, payIdx){
     sums.push({label:'Discount',txt:discount>0?invNum_(discount):'-',bold:false});
     // Invoice per pembayaran: Total Harga = Total induk; pembayaran ditulis
     // "Pembayaran I, II, ..." sampai yang dipilih (yang dipilih dicetak tebal).
-    sums.push({label:'Total Harga',txt:invNum_(perPay?total:totalHarga),bold:false});
+    // Ber-NPWP: Total Harga = jumlah DPP barang (exclude PPN) - discount, untuk invoice induk, DP & Pembayaran I, II, ...
+    const dppItems=items.reduce((a2,it)=>a2+(Number(it.qty)||0)*itemSplit_(it).dpp,0);
+    const totalHargaInv=npwp?dppItems-discount:(perPay?total:totalHarga);
+    sums.push({label:'Total Harga',txt:invNum_(totalHargaInv),bold:false});
     const lastIdx=perPay?payIdx:pays.length-1;
     pays.forEach((p,i)=>{
       if(i>lastIdx) return;
