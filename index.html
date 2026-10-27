@@ -2627,7 +2627,23 @@ function updateTotalHint_(prefix){
   el.textContent=msg.join(' ');
   el.style.color=msg.some(m=>m.startsWith('⚠️'))?'#b45309':'';
 }
+// Isian yang terlihat di layar selalu jadi acuan (jaga-jaga kalau ada ketikan yang tidak terbaca)
+function syncItemsFromDom_(prefix){
+  const list=document.getElementById(prefix==='mesin'?'m-item-list':'s-item-list'); if(!list) return;
+  itemRows.forEach((it,i)=>{
+    const row=list.querySelector('#itemrow-'+i); if(!row) return;
+    const v=f=>{ const el=row.querySelector('[data-f="'+f+'"]'); return el?el.value:null; };
+    const b=v('barang'), q=v('qty'), h=v('harga'), sr=v('seri');
+    if(b!==null) it.barang=b;
+    if(q!==null) it.qty=Number(q)||0;
+    if(h!==null) it.harga=Number(h)||0;
+    if(sr!==null) it.seri=sr;
+    const sub=document.getElementById('item-subtotal-'+i); if(sub) sub.textContent=fmt(itemRowSubtotal_(it));
+    updateItemTaxCells_(i);
+  });
+}
 function recalcItemsTotal_(prefix){
+  syncItemsFromDom_(prefix);
   const sum=itemRows.reduce((a,it)=>a+itemRowSubtotal_(it),0);
   const dppId=prefix==='mesin'?'m-dpp':'s-dpp';
   document.getElementById(dppId).value=sum;
@@ -2650,13 +2666,13 @@ function renderItemRows(prefix){
   itemRows.forEach((it,i)=>{
     const hasImg=it._imgPreview||it._hasImg;
     h+=`<tr id="itemrow-${i}" class="${it.noPpn?'no-ppn':''}">
-      <td><input type="text" value="${(it.barang||'').replace(/"/g,'&quot;')}" placeholder="Nama barang" oninput="itemRows[${i}].barang=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:160px"></td>
-      <td><input type="number" value="${it.qty||1}" min="1" oninput="itemRows[${i}].qty=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:60px"></td>
-      <td><input type="number" value="${it.harga||0}" oninput="itemRows[${i}].harga=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
+      <td><input type="text" value="${(it.barang||'').replace(/"/g,'&quot;')}" placeholder="Nama barang" data-f="barang" oninput="itemRows[${i}].barang=this.value" onchange="itemRows[${i}].barang=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:160px"></td>
+      <td><input type="number" value="${it.qty||1}" min="1" data-f="qty" oninput="itemRows[${i}].qty=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" onchange="itemRows[${i}].qty=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:60px"></td>
+      <td><input type="number" value="${it.harga||0}" data-f="harga" oninput="itemRows[${i}].harga=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" onchange="itemRows[${i}].harga=Number(this.value)||0;updateItemSubtotalCell_(${i},'${prefix}')" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:110px"></td>
       <td class="tax-col fp-td"><input type="checkbox" class="fp-check" ${it.noPpn?'checked':''} onchange="itemRows[${i}].noPpn=this.checked;updateItemSubtotalCell_(${i},'${prefix}')" title="Centang kalau barang/jasa ini tidak kena PPN"></td>
       <td class="tax-col tax-val" id="item-dpp-${i}">${itemTaxCell_(it,'dpp')}</td><td class="tax-col tax-val" id="item-ppn-${i}">${itemTaxCell_(it,'ppn')}</td>
       <td class="currency" id="item-subtotal-${i}">${fmt(itemRowSubtotal_(it))}</td>
-      <td><input type="text" value="${(it.seri||'').replace(/"/g,'&quot;')}" placeholder="-" oninput="itemRows[${i}].seri=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:90px"></td>
+      <td><input type="text" value="${(it.seri||'').replace(/"/g,'&quot;')}" placeholder="-" data-f="seri" oninput="itemRows[${i}].seri=this.value" onchange="itemRows[${i}].seri=this.value" style="border:1px solid #dde3ec;padding:4px;border-radius:4px;font-size:11px;width:90px"></td>
       ${isMesin?`<td>
         <label class="upload-bukti-btn ${hasImg?'has-file':''}" for="item-seri-file-${i}" title="${hasImg?'Foto tersimpan — klik untuk ganti':'Upload foto No. Seri'}">${UPLOAD_ICON_}</label>
         <input type="file" id="item-seri-file-${i}" accept="image/jpeg,image/png,image/jpg" style="display:none" onchange="handleItemSeriUpload(${i},this,'${prefix}')">
@@ -2809,6 +2825,7 @@ async function editMesin(id){
   renderItemRows('mesin'); renderPayRows('mesin'); openModal('modal-mesin');
 }
 async function saveMesin(){
+  syncItemsFromDom_('mesin'); recalcItemsTotal_('mesin');
   if(payRows.some(p=>p._uploading)){ toast('Tunggu sebentar, bukti pembayaran masih di-upload','error'); return; }
   if(!itemRows.length){ toast('Minimal isi 1 barang','error'); return; }
   for(const[i,it] of itemRows.entries()){
@@ -2917,6 +2934,7 @@ async function editSpare(id){
   renderItemRows('spare'); renderPayRows('spare');openModal('modal-spare');
 }
 async function saveSpare(){
+  syncItemsFromDom_('spare'); recalcItemsTotal_('spare');
   if(payRows.some(p=>p._uploading)){ toast('Tunggu sebentar, bukti pembayaran masih di-upload','error'); return; }
   if(!itemRows.length){ toast('Minimal isi 1 barang','error'); return; }
   for(const[i,it] of itemRows.entries()){
@@ -4541,7 +4559,7 @@ function enhanceNumInput_(el){
   if(el._numFmt || el.hasAttribute('data-nofmt')) return;
   el._numFmt=true;
   const raw=NATIVE_VAL_.get.call(el);
-  el.type='text'; el.setAttribute('inputmode','decimal'); el.classList.add('num-fmt');
+  el.type='text'; el.setAttribute('inputmode','decimal'); el.setAttribute('autocomplete','off'); el.classList.add('num-fmt');
   Object.defineProperty(el,'value',{configurable:true,
     get(){ return idParseNum_(NATIVE_VAL_.get.call(this)); },
     set(v){ NATIVE_VAL_.set.call(this,(v===''||v==null)?'':(isFinite(Number(v))?idFmtNum_(Number(v)):String(v))); }
