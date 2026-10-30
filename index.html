@@ -4544,9 +4544,12 @@ function buildInvoiceDoc_(id, type, payIdx){
     const selNote=perPay?String(sel.ket||'').trim():'';
     let n1=selNote, n2='';
     if(selNote.length>55){ const cut=selNote.lastIndexOf(' ',55); const k=cut>20?cut:55; n1=selNote.slice(0,k).trim(); n2=selNote.slice(k).trim(); }
+    // Note: invoice induk, dan invoice per pembayaran yang Note-nya kosong -> "Harga ... sudah/belum termasuk PPN"
+    // (sama dengan invoice induk). Invoice per pembayaran yang Note-nya diisi -> isi Note itu.
+    const useOwnNote=perPay&&!!selNote;
     rowsXml+=invFill_(T.MID,{
-      NOTE1: perPay ? invText_(n1) : `Harga ${type==='mesin'?'mesin ':''}Rp. ${invNum_(total)},00`,
-      NOTE2: perPay ? invText_(n2) : (ppn>0 ? 'sudah termasuk PPN' : 'belum termasuk PPN')
+      NOTE1: useOwnNote ? invText_(n1) : `Harga ${type==='mesin'?'mesin ':''}Rp. ${invNum_(total)},00`,
+      NOTE2: useOwnNote ? invText_(n2) : (ppn>0 ? 'sudah termasuk PPN' : 'belum termasuk PPN')
     });
     // Customer ber-NPWP: angka pembayaran = DPP (Jumlah/1,11) dan PPN = DPP x 11% dari pembayaran yang dipilih.
     // Tanpa NPWP: angka pembayaran penuh, PPN tidak dipisah.
