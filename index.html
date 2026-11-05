@@ -4559,7 +4559,8 @@ function buildInvoiceDoc_(id, type, payIdx){
     const payAmt=(p,i)=>(perPay&&npwp&&i===payIdx)?taxSplit_(p.jumlah).dpp:(Number(p.jumlah)||0);
     // Rincian: Discount, Total Harga, DP / PAY ..., PPN
     const sums=[];
-    sums.push({label:'Discount',txt:discount>0?invNum_(discount):'-',bold:false});
+    // Baris Discount hanya dicetak kalau transaksi memang ada discount-nya
+    if(discount>0) sums.push({label:'Discount',txt:invNum_(discount),bold:false});
     // Invoice per pembayaran: Total Harga = Total induk; pembayaran ditulis
     // "Pembayaran I, II, ..." sampai yang dipilih (yang dipilih dicetak tebal).
     // Ber-NPWP: Total Harga = jumlah DPP barang (exclude PPN) - discount, untuk invoice induk, DP & Pembayaran I, II, ...
