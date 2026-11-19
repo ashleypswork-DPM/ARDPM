@@ -217,6 +217,17 @@ tbody tr:hover{background:#f8f9fb;}
 tbody td{padding:8px 11px;vertical-align:top;}
 .no-data{padding:40px;text-align:center;color:var(--text-light);font-size:13px;}
 .status-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px;}
+.status-reject{background:#f3e5f8;color:#8e44ad;}
+.summary-card.reject .value{color:#8e44ad;}
+.tab-btn.tab-reject.active{color:#8e44ad;border-bottom-color:#8e44ad;}
+.tarik-box{border:1px dashed #c39bd3;background:#fbf6fd;border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;}
+.tarik-box .form-group{margin:0;}
+.tarik-hint{grid-column:1/-1;font-size:11px;font-weight:600;color:#8e44ad;min-height:0;}
+.tarik-hint.warn{color:#c0392b;}
+.hscroll{overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
+.dash-grid>*{min-width:0;}
+@media (min-width:861px){ .summary-grid.g5{grid-template-columns:repeat(5,1fr);} .summary-grid.g3{grid-template-columns:repeat(3,1fr);} }
+@media (max-width:600px){ .tarik-box{grid-template-columns:1fr;} }
 .status-lunas{background:#e8f8ef;color:var(--lunas);}
 .status-belum{background:#fdecea;color:var(--belum);}
 .status-progress{background:#fef6e4;color:var(--progress);}
@@ -868,6 +879,11 @@ input.num-fmt{font-variant-numeric:tabular-nums;}
         <div class="form-group"><label>Tanggal Kirim</label><input type="date" id="m-tgl-kirim" onchange="calcArAuto_('mesin')"></div>
         <div class="form-group"><label>Tanggal Setup</label><input type="date" id="m-tgl-setup"></div>
         <div class="form-group"><label>A/R (Rp) — Sisa Tagihan</label><input type="number" id="m-ar" placeholder="0"><small class="ar-hint" id="m-ar-hint"></small></div>
+        <div class="form-group full"><div class="tarik-box">
+          <div class="form-group"><label>⛔ Tarik Mesin</label><select id="m-tarik" onchange="tarikHint_()"><option value="">— Tidak ditarik —</option><option>Customer Gagal Bayar</option><option>Customer Tidak Jadi</option></select></div>
+          <div class="form-group"><label>Tanggal Tarik Mesin</label><input type="date" id="m-tgl-tarik" data-nofmt onchange="tarikHint_()"></div>
+          <small class="tarik-hint" id="m-tarik-hint"></small>
+        </div></div>
         <div class="form-group"><label>PPh Jasa (Rp)</label><input type="number" id="m-pph" placeholder="0" min="0" oninput="calcArAuto_('mesin')"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. PPh yang dipotong customer dihitung sebagai bagian pelunasan.</small></div>
         <div class="form-group form-spacer"></div>
         <div class="form-group"><label>Biaya Admin (Rp)</label><input type="number" id="m-admin" placeholder="0" min="0" oninput="calcArAuto_('mesin')"><small class="field-hint">Jika ada diisi, jika tidak ada isi 0. Biaya admin yang dipotong dari transfer customer dihitung sebagai bagian pelunasan.</small></div>
@@ -1168,7 +1184,7 @@ function setSyncStatus(text){
 // ter-tulis di URL (browser history / server access log).
 // Code.gs yang terpasang (deployment /exec) masih versi lama -> Booking Nomor Invoice,
 // NPWP, dll. TIDAK ikut tersimpan ke Sheets. Tampilkan peringatan supaya kelihatan.
-const API_VERSION_NEEDED=7;
+const API_VERSION_NEEDED=8;
 let oldServerWarned_=false;
 function warnOldServer_(result){
   if(result && Number(result.apiVersion)>=API_VERSION_NEEDED) return false;
@@ -1252,7 +1268,17 @@ function arStatusOf_(r){
 // A/R baru BERJALAN setelah barang dikirim (Tanggal Kirim terisi). Sebelum itu transaksi hanya
 // tercatat: tidak ikut Total A/R, Dashboard, Cetak AR, maupun Payment Reminder.
 function isShipped_(r){ return !!String((r&&r.tglKirim)||'').trim(); }
-function isArActive_(r){ return isShipped_(r) && r.status!=='LUNAS'; }
+// PENJUALAN REJECT: mesin ditarik (alasan + tanggal tarik terisi) -> tidak dihitung A/R lagi,
+// pindah dari tab Penjualan Mesin ke tab Penjualan Reject.
+const TARIK_OPTS_=['Customer Gagal Bayar','Customer Tidak Jadi'];
+function isReject_(r){ return !!(r && String(r.tarik||'').trim() && String(r.tglTarik||'').trim()); }
+function mesinAktif_(){ return (db.mesin||[]).filter(r=>!isReject_(r)); }
+function mesinReject_(){ return (db.mesin||[]).filter(isReject_); }
+// Uang Gantung = pembayaran di History Pembayaran yang sudah ada bukti fotonya
+function uangGantung_(r){ return verifiedPaid_(r.payments); }
+function tarikShort_(t){ return String(t||'').replace(/^Customer\s+/i,''); }
+function rejectBadge_(r){ return `<span class="status-badge status-reject">REJECT</span><br><span class="text-sm">${escAttr_(tarikShort_(r.tarik))}</span>`; }
+function isArActive_(r){ return isShipped_(r) && r.status!=='LUNAS' && !isReject_(r); }
 function arActive_(r){ return isArActive_(r) ? (Number(r.ar)||0) : 0; }
 function arCell_(r){
   const ar=Number(r.ar)||0;
@@ -1647,7 +1673,8 @@ function showLunasDetail_(scope,key){
 function showDashboard(){
   currentSalesId=null; renderSidebar(); closeSidebarMobile();
   const mc=document.getElementById('main-content');
-  const allM=db.mesin,allS=db.spare;
+  const allM=mesinAktif_(),allS=db.spare;
+  const rejAll=mesinReject_(), rejVal=rejAll.reduce((a,r)=>a+(Number(r.total)||0),0);
   const totalVal=[...allM,...allS].reduce((a,r)=>a+(r.total||0),0);
   const totalAR=[...allM,...allS].reduce((a,r)=>a+arActive_(r),0);
   const totalLunas=[...allM,...allS].filter(r=>r.status==='LUNAS').length;
@@ -1655,7 +1682,7 @@ function showDashboard(){
   const totalBelum=[...allM,...allS].filter(isArActive_).length;
   const totalProg=[...allM,...allS].filter(r=>r.status==='PROGRESS').length;
   const salesRows=db.sales.map(s=>{
-    const sm=[...db.mesin.filter(m=>m.salesId===s.id),...db.spare.filter(m=>m.salesId===s.id)];
+    const sm=[...allM.filter(m=>m.salesId===s.id),...db.spare.filter(m=>m.salesId===s.id)];
     return{sales:s,total:sm.reduce((a,r)=>a+(r.total||0),0),ar:sm.reduce((a,r)=>a+arActive_(r),0),lunas:sm.filter(r=>r.status==='LUNAS').length,count:sm.length};
   }).filter(r=>r.count>0).sort((a,b)=>b.ar-a.ar);
   const belumRecords=[...allM,...allS].filter(isArActive_).sort((a,b)=>b.ar-a.ar).slice(0,10);
@@ -1663,23 +1690,24 @@ function showDashboard(){
   const pie=buildPie([{label:'Lunas',value:totalLunas,color:'#27ae60'},{label:'Progress',value:totalProg,color:'#f39c12'},{label:'Belum',value:totalBelum,color:'#e74c3c'}]);
   mc.innerHTML=`<div class="topbar"><h2>📈 Dashboard — ${db.ptInfo.nama||'AR Management'}</h2><span class="topbar-meta">Update: ${new Date().toLocaleDateString('id-ID')}</span></div>
   <div class="content dash-container">
-    <div class="summary-grid">
+    <div class="summary-grid g5">
       <div class="summary-card"><div class="label">Total Nilai Penjualan</div><div class="value" style="font-size:15px">${fmt(totalVal)}</div><div class="sub">${totalAll} transaksi</div></div>
       <div class="summary-card danger"><div class="label">Total A/R Tertunggak</div><div class="value" style="font-size:15px">${fmt(totalAR)}</div><div class="sub">${totalBelum} transaksi belum</div></div>
+      <div class="summary-card reject" style="cursor:pointer" onclick="document.getElementById('dash-reject')?.scrollIntoView({behavior:'smooth'})"><div class="label">Penjualan Reject</div><div class="value" style="font-size:15px">${fmt(rejVal)}</div><div class="sub">${rejAll.length} penjualan mesin reject</div></div>
       <div class="summary-card success"><div class="label">Sudah Lunas</div><div class="value">${totalLunas}</div><div class="sub">${pct(totalLunas,totalAll)}% dari total</div></div>
       <div class="summary-card success"><div class="label">Lunas ${new Date().getFullYear()}</div><div class="value">${lunasYearStats_([...allM,...allS]).byYear[new Date().getFullYear()]?.n||0}</div><div class="sub">transaksi lunas tahun ini</div></div>
     </div>
     <div class="dash-grid">
       ${lunasYearCard_([...allM,...allS],'all')}
-      <div class="dash-card"><h3>👤 AR per Sales</h3><table class="ar-table">
+      <div class="dash-card"><h3>👤 AR per Sales</h3><div class="hscroll"><table class="ar-table">
         <thead><tr><th>Sales</th><th>Lokasi</th><th>A/R</th><th>% Lunas</th></tr></thead>
         <tbody>${salesRows.map(r=>`<tr>
           <td><b>${r.sales.nama}</b></td><td><span style="font-size:10px;color:var(--text-light)">${r.sales.kota}</span></td>
           <td class="currency" style="color:var(--belum);font-weight:700">${fmt(r.ar)}</td>
           <td><div style="font-size:10px;margin-bottom:2px">${r.lunas}/${r.count} (${pct(r.lunas,r.count)}%)</div>
           <div class="progress-bar-wrap"><div class="progress-bar" style="width:${pct(r.lunas,r.count)}%;background:${pct(r.lunas,r.count)>=80?'#27ae60':pct(r.lunas,r.count)>=50?'#f39c12':'#e74c3c'}"></div></div></td>
-        </tr>`).join('')}</tbody></table></div>
-      <div class="dash-card full"><h3>🔴 Customer Belum Lunas (Top 10)</h3><table class="ar-table">
+        </tr>`).join('')}</tbody></table></div></div>
+      <div class="dash-card"><h3>🔴 Customer Belum Lunas (Top 10)</h3><div class="hscroll"><table class="ar-table">
         <thead><tr><th>Customer</th><th>Barang</th><th>Sales</th><th>Tgl PO</th><th>Tgl Kirim</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th></tr></thead>
         <tbody>${belumRecords.length===0?`<tr><td colspan="9" style="text-align:center;padding:24px;color:#999">Semua sudah lunas 🎉</td></tr>`:
           belumRecords.map(r=>{const s=db.sales.find(x=>x.id===r.salesId);return`<tr>
@@ -1692,7 +1720,9 @@ function showDashboard(){
             <td class="currency"><b style="color:var(--belum)">${fmt(r.ar)}</b></td>
             <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td>
           </tr>`;}).join('')}
-        </tbody></table></div>
+        </tbody></table></div></div>
+      <div class="dash-card" id="dash-reject"><h3>⛔ Customer Penjualan yang Reject</h3>${rejectTableHTML_(rejAll,true)}
+        <div class="text-sm" style="margin-top:6px">Done Payment = pembayaran yang sudah ada bukti foto (Uang Gantung). Transaksi reject tidak dihitung sebagai A/R.</div></div>
     </div>
   </div>`;
 }
@@ -1729,6 +1759,7 @@ function renderMain(){
       <button class="tab-btn ${currentTab==='dash'?'active':''}" onclick="switchTab('dash')">📊 Dashboard Sales</button>
       <button class="tab-btn ${currentTab==='mesin'?'active':''}" onclick="switchTab('mesin')">🔩 Penjualan Mesin</button>
       <button class="tab-btn ${currentTab==='spare'?'active':''}" onclick="switchTab('spare')">⚙️ Spareparts & Jasa</button>
+      <button class="tab-btn tab-reject ${currentTab==='reject'?'active':''}" onclick="switchTab('reject')">⛔ Penjualan Reject${(()=>{const n=mesinReject_().filter(m=>m.salesId===currentSalesId).length;return n?` <span class="status-badge status-reject">${n}</span>`:'';})()}</button>
     </div>
     <div class="content" id="tab-content"></div>`;
   renderTab();
@@ -1749,9 +1780,10 @@ function renderSummary(records){
 }
 
 function renderDashTab(tc){
-  const mRec=db.mesin.filter(m=>m.salesId===currentSalesId);
+  const mRec=mesinAktif_().filter(m=>m.salesId===currentSalesId);
   const sRec=db.spare.filter(m=>m.salesId===currentSalesId);
   const allRec=[...mRec,...sRec];
+  const rejRec=mesinReject_().filter(m=>m.salesId===currentSalesId), rejVal=rejRec.reduce((a,r)=>a+(Number(r.total)||0),0);
   const totalVal=allRec.reduce((a,r)=>a+(r.total||0),0);
   const totalAR=allRec.reduce((a,r)=>a+arActive_(r),0);
   const L=allRec.filter(r=>r.status==='LUNAS').length;
@@ -1759,28 +1791,30 @@ function renderDashTab(tc){
   const B=allRec.filter(r=>r.status==='BELUM').length;
   const pie=buildPie([{label:'Lunas',value:L,color:'#27ae60'},{label:'Progress',value:P,color:'#f39c12'},{label:'Belum',value:B,color:'#e74c3c'}]);
   const belum=allRec.filter(isArActive_).sort((a,b)=>b.ar-a.ar);
-  tc.innerHTML=`<div class="summary-grid">
+  tc.innerHTML=`<div class="summary-grid g5">
     <div class="summary-card"><div class="label">Total Transaksi</div><div class="value">${allRec.length}</div><div class="sub">Mesin: ${mRec.length} | Spare: ${sRec.length}</div></div>
     <div class="summary-card"><div class="label">Total Nilai</div><div class="value" style="font-size:14px">${fmt(totalVal)}</div></div>
     <div class="summary-card danger"><div class="label">Total A/R</div><div class="value" style="font-size:14px">${fmt(totalAR)}</div></div>
     <div class="summary-card success"><div class="label">Sudah Lunas</div><div class="value">${L}</div><div class="sub">${pct(L,allRec.length)}%</div></div>
+    <div class="summary-card reject" style="cursor:pointer" onclick="switchTab('reject')"><div class="label">Penjualan Reject</div><div class="value" style="font-size:14px">${fmt(rejVal)}</div><div class="sub">${rejRec.length} penjualan mesin reject</div></div>
   </div>
   <div class="dash-grid">
     ${lunasYearCard_(allRec,'sales')}
-    <div class="dash-card"><h3>💰 Ringkasan Nilai</h3><table class="ar-table">
+    <div class="dash-card"><h3>💰 Ringkasan Nilai</h3><div class="hscroll"><table class="ar-table">
       <thead><tr><th>Kategori</th><th>Transaksi</th><th>Total Nilai</th><th>Done Payment</th><th>A/R</th></tr></thead>
       <tbody>
         <tr><td><b>Mesin</b></td><td>${mRec.length}</td><td class="currency">${fmt(mRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(mRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(mRec.reduce((a,r)=>a+arActive_(r),0))}</td></tr>
         <tr><td><b>Sparepart/Jasa</b></td><td>${sRec.length}</td><td class="currency">${fmt(sRec.reduce((a,r)=>a+(r.total||0),0))}</td><td class="currency" style="color:var(--lunas)">${fmt(sRec.reduce((a,r)=>a+doneOf_(r),0))}</td><td class="currency" style="color:var(--belum)">${fmt(sRec.reduce((a,r)=>a+arActive_(r),0))}</td></tr>
-      </tbody></table></div>
-    <div class="dash-card full"><h3>🔴 Daftar Belum Lunas</h3><table class="ar-table">
+      </tbody></table></div></div>
+    <div class="dash-card"><h3>🔴 Daftar Belum Lunas</h3><div class="hscroll"><table class="ar-table">
       <thead><tr><th>Customer</th><th>Barang</th><th>Tgl PO</th><th>Tgl Kirim</th><th>Total</th><th>Done Payment</th><th>A/R</th><th>Status</th></tr></thead>
       <tbody>${belum.length===0?`<tr><td colspan="8" style="text-align:center;padding:20px;color:#999">Semua sudah lunas 🎉</td></tr>`:
         belum.map(r=>`<tr><td><b>${r.customer}</b><br><span class="text-sm">${r.pic||''}</span></td><td>${r.barang}</td>
           <td style="white-space:nowrap">${fmtDate(r.tglPO)}</td><td style="white-space:nowrap">${fmtDate(r.tglKirim)}</td>
           <td class="currency">${fmt(r.total)}</td><td class="currency" style="color:var(--lunas);font-weight:600">${fmt(doneOf_(r))}</td><td class="currency"><b style="color:var(--belum)">${fmt(r.ar)}</b></td>
           <td><span class="status-badge ${statusClass(r.status)}">${statusLabel(r.status)}</span></td></tr>`).join('')}
-      </tbody></table></div>
+      </tbody></table></div></div>
+    <div class="dash-card"><h3>⛔ Daftar Penjualan Reject</h3>${rejectTableHTML_(rejRec,false)}</div>
   </div>`;
 }
 
@@ -1789,6 +1823,7 @@ function renderTab(){
   if(!tc) return;
   if(currentTab==='dash') renderDashTab(tc);
   else if(currentTab==='mesin') renderMesinTab(tc);
+  else if(currentTab==='reject') renderRejectTab(tc);
   else renderSpareTab(tc);
 }
 
@@ -1848,7 +1883,7 @@ function setTableFilter(type, val){
 }
 function refreshFilterBox_(type){
   const box=document.getElementById('filterbox-'+type); if(!box) return;
-  const recs=(type==='mesin'?db.mesin:db.spare).filter(m=>m.salesId===currentSalesId);
+  const recs=(type==='mesin'?mesinAktif_():db.spare).filter(m=>m.salesId===currentSalesId);
   box.innerHTML=filterSelectHTML_(type,recs,type==='mesin'?mesinFilterSel:spareFilterSel);
 }
 // Popup daftar No Invoice di 1 transaksi (klik nomor urut di tabel)
@@ -1913,6 +1948,7 @@ function overdueList_(){
   const out=[];
   [['mesin',db.mesin],['spare',db.spare]].forEach(([type,arr])=>(arr||[]).forEach(r=>{
     if(!isShipped_(r)) return;   // A/R belum berjalan
+    if(isReject_(r)) return;     // mesin ditarik: tidak ditagih lagi
     const pays=r.payments||[];
     const sisaHitung=(Number(r.total)||0)-settledOf_(r);
     // Sisa yang masih harus dibayar; transaksi yang sisanya 0 tidak ditampilkan
@@ -2052,7 +2088,7 @@ function bindDragScrollAll_(){
 // MESIN TABLE
 // ═══════════════════════════════════════════════════════
 async function renderMesinTab(tc){
-  const records=db.mesin.filter(m=>m.salesId===currentSalesId);
+  const records=mesinAktif_().filter(m=>m.salesId===currentSalesId);
   let html=renderSummary(records);
   html+=`<div class="table-wrap"><div class="table-toolbar">
     <input type="text" placeholder="🔍 Cari customer, barang, no invoice..." id="search-mesin" oninput="filterMesin()">
@@ -2066,7 +2102,7 @@ async function renderMesinTab(tc){
 async function renderMesinTableBody(){
   const cont=document.getElementById('mesin-table-container');
   if(!cont) return;
-  const all=db.mesin.filter(m=>m.salesId===currentSalesId);
+  const all=mesinAktif_().filter(m=>m.salesId===currentSalesId);
   const filtered=all.filter(r=>matchesSelFilter_(r,mesinFilterSel)&&matchesSearch_(r,mesinSearchQ));
   const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE));
   if(mesinPage>totalPages) mesinPage=totalPages;
@@ -2102,6 +2138,51 @@ async function renderMesinTableBody(){
   bindDragScrollAll_();
 }
 function goToMesinPage(p){ mesinPage=p; renderMesinTableBody(); }
+
+// ═══════════════════════════════════════════════════════
+// TAB PENJUALAN REJECT (mesin yang ditarik)
+// ═══════════════════════════════════════════════════════
+async function renderRejectTab(tc){
+  const recs=mesinReject_().filter(m=>m.salesId===currentSalesId).sort((a,b)=>String(b.tglTarik||'').localeCompare(String(a.tglTarik||'')));
+  const nilai=recs.reduce((a,r)=>a+(Number(r.total)||0),0), gantung=recs.reduce((a,r)=>a+uangGantung_(r),0);
+  let html=`<div class="summary-grid g3">
+    <div class="summary-card"><div class="label">Total Transaksi</div><div class="value">${recs.length}</div><div class="sub">penjualan mesin reject</div></div>
+    <div class="summary-card"><div class="label">Total Nilai</div><div class="value" style="font-size:14px">${fmt(nilai)}</div><div class="sub">nilai transaksi yang ditarik</div></div>
+    <div class="summary-card reject"><div class="label">Total Uang Gantung</div><div class="value" style="font-size:14px">${fmt(gantung)}</div><div class="sub">pembayaran yang sudah ada bukti foto</div></div>
+  </div>
+  <div class="table-wrap"><div class="table-scroll"><table id="table-reject">
+    <thead><tr><th>No</th><th>Tgl PO</th><th>No Inv</th><th>Customer</th><th>Nama Barang</th><th>QTY</th><th>TOTAL</th><th>History Pay</th><th>Tgl Kirim</th><th>Alasan Tarik</th><th>Tgl Tarik</th><th>Uang Gantung</th><th>Aksi</th></tr></thead><tbody>`;
+  for(const [i,r] of recs.entries()){
+    const chips=await renderPayChips(r.payments,r.id,'mesin');
+    html+=`<tr><td>${i+1}</td><td>${fmtDate(r.tglPO)}</td><td>${escAttr_(r.noInv||'-')}</td>
+      <td><b>${r.customer}</b><br><span class="text-sm">${r.pic||''}</span></td>
+      <td><b>${r.barang}</b><br><span class="text-sm" style="cursor:pointer;color:var(--primary-light)" onclick="showItemDetail('${r.id}','mesin')">🔎 Rincian (${(r.items&&r.items.length)||1} barang)</span></td>
+      <td>${r.qty}</td><td class="text-right currency"><b>${fmt(r.total)}</b></td><td>${chips}</td><td>${fmtDate(r.tglKirim)}</td>
+      <td><span class="status-badge status-reject">${escAttr_(tarikShort_(r.tarik))}</span></td><td style="white-space:nowrap">${fmtDate(r.tglTarik)}</td>
+      <td class="text-right currency" style="color:#8e44ad"><b>${fmt(uangGantung_(r))}</b></td>
+      <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','mesin')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editMesin('${r.id}')" title="Edit / batalkan Tarik Mesin">✏️</button> <button class="btn btn-danger" style="font-size:10px" onclick="deleteMesin('${r.id}')">🗑️</button></td></tr>`;
+  }
+  if(!recs.length) html+=`<tr><td colspan="13" class="no-data">Belum ada penjualan mesin yang ditarik.<br><span class="text-sm">Isi kolom Tarik Mesin + Tanggal Tarik di Edit Penjualan Mesin untuk memindahkan transaksi ke sini.</span></td></tr>`;
+  html+=`</tbody></table></div></div>`;
+  tc.innerHTML=html; bindDragScrollAll_();
+}
+// Tabel ringkas Penjualan Reject untuk Dashboard (utama: withSales=true)
+function rejectTableHTML_(recs,withSales){
+  const sorted=[...recs].sort((a,b)=>String(b.tglTarik||'').localeCompare(String(a.tglTarik||'')));
+  const cols=withSales?9:8;
+  return `<div class="hscroll"><table class="ar-table">
+    <thead><tr><th>Customer</th><th>Barang</th>${withSales?'<th>Sales</th>':''}<th>Tgl PO</th><th>Tgl Kirim</th><th>${withSales?'Tgl Tarik Mesin':'Tgl Tarik'}</th><th>Total</th><th>Done Payment</th><th>Status</th></tr></thead>
+    <tbody>${!sorted.length?`<tr><td colspan="${cols}" style="text-align:center;padding:24px;color:#999">Tidak ada penjualan yang reject 👍</td></tr>`:
+      sorted.map(r=>{const s=db.sales.find(x=>x.id===r.salesId);return `<tr>
+        <td><b>${r.customer}</b><br><span class="text-sm">${r.pic||''}</span></td>
+        <td style="max-width:180px">${r.barang}</td>${withSales?`<td>${s?s.nama:'-'}</td>`:''}
+        <td style="white-space:nowrap">${fmtDate(r.tglPO)}</td><td style="white-space:nowrap">${fmtDate(r.tglKirim)}</td>
+        <td style="white-space:nowrap">${fmtDate(r.tglTarik)}</td>
+        <td class="currency">${fmt(r.total)}</td>
+        <td class="currency" style="color:var(--lunas);font-weight:600" title="Pembayaran yang sudah ada bukti foto (Uang Gantung)">${fmt(uangGantung_(r))}</td>
+        <td>${rejectBadge_(r)}</td></tr>`;}).join('')}
+    </tbody></table></div>`;
+}
 
 async function renderSpareTab(tc){
   const records=db.spare.filter(m=>m.salesId===currentSalesId);
@@ -3041,7 +3122,8 @@ function openAddMesin(){
   editOrigTotal_=null;
   editingId=null;payRows=[];itemRows=[];
   document.getElementById('modal-mesin-title').textContent='Tambah Penjualan Mesin';
-  ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-telp','m-npwp','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup'].forEach(id=>document.getElementById(id).value='');
+  ['m-tgl-po','m-no-po','m-no-inv','m-tgl-inv','m-sales','m-customer','m-pic','m-telp','m-npwp','m-alamat','m-ket','m-tgl-lunas','m-tgl-kirim','m-tgl-setup','m-tarik','m-tgl-tarik'].forEach(id=>document.getElementById(id).value='');
+  editWasReject_=false; tarikHint_();
   ['m-dpp','m-ppn','m-discount','m-total','m-ar','m-pph','m-admin'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('m-status').value='BELUM';
   document.getElementById('m-pph').value=0;
@@ -3092,11 +3174,35 @@ async function editMesin(id){
   document.getElementById('m-pph').value=r.pph||0;
   document.getElementById('m-admin').value=r.admin||0;
   document.getElementById('m-ar').value=r.ar||'';
+  document.getElementById('m-tarik').value=TARIK_OPTS_.includes(r.tarik)?r.tarik:'';
+  document.getElementById('m-tgl-tarik').value=r.tglTarik||'';
+  editWasReject_=isReject_(r); tarikHint_();
   planRows=(r.planned||[]).map(p=>({...p})); renderPlanRows('mesin');
   renderItemRows('mesin'); renderPayRows('mesin'); openModal('modal-mesin');
 }
+let editWasReject_=false;
+function tarikHint_(){
+  const t=document.getElementById('m-tarik').value, d=document.getElementById('m-tgl-tarik').value, h=document.getElementById('m-tarik-hint');
+  if(!h) return;
+  h.classList.remove('warn');
+  if(t&&d){ const ar=Number(document.getElementById('m-ar').value)||0;
+    h.textContent=editWasReject_?'⛔ Transaksi ini ada di Penjualan Reject (A/R tidak dihitung). Kosongkan Tarik Mesin untuk mengembalikannya ke Penjualan Mesin.'
+      :`⛔ Saat disimpan, transaksi ini pindah ke Penjualan Reject dan A/R ${fmt(ar)} tidak dihitung lagi.`; }
+  else if(t||d){ h.classList.add('warn'); h.textContent=t?'Isi juga Tanggal Tarik Mesin supaya transaksi masuk Penjualan Reject.':'Pilih juga alasan Tarik Mesin supaya transaksi masuk Penjualan Reject.'; }
+  else h.textContent=editWasReject_?'↩️ Saat disimpan, transaksi ini kembali ke Penjualan Mesin dan A/R-nya dihitung lagi.':'';
+}
 async function saveMesin(){
   syncItemsFromDom_('mesin'); recalcItemsTotal_('mesin');
+  const tarikV=document.getElementById('m-tarik').value, tglTarikV=document.getElementById('m-tgl-tarik').value;
+  if(!!tarikV!==!!tglTarikV){ toast(tarikV?'Tanggal Tarik Mesin belum diisi':'Alasan Tarik Mesin belum dipilih','error'); return; }
+  const willReject=!!(tarikV&&tglTarikV);
+  if(willReject&&!editWasReject_){
+    const cust=document.getElementById('m-customer').value||'ini', ar=Number(document.getElementById('m-ar').value)||0;
+    if(!confirm(`Transaksi ${cust} akan dipindah ke Penjualan Reject (${tarikV}).\nA/R-nya (${fmt(ar)}) tidak dihitung lagi di tagihan sales.\n\nLanjutkan?`)) return;
+  }
+  if(!willReject&&editWasReject_){
+    if(!confirm('Tarik Mesin dikosongkan: transaksi ini akan kembali ke Penjualan Mesin dan A/R-nya dihitung lagi.\n\nLanjutkan?')) return;
+  }
   if(payRows.some(p=>p._uploading)){ toast('Tunggu sebentar, bukti pembayaran masih di-upload','error'); return; }
   if(!itemRows.length){ toast('Minimal isi 1 barang','error'); return; }
   for(const[i,it] of itemRows.entries()){
@@ -3106,7 +3212,7 @@ async function saveMesin(){
   const aggBarang=cleanItems.map(it=>it.barang).filter(Boolean).join(', ');
   const aggQty=cleanItems.reduce((a,it)=>a+it.qty,0);
   const aggSeri=cleanItems.map(it=>it.seri).filter(Boolean).join(', ');
-  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,npwp:document.getElementById('m-npwp').value.trim(),telp:document.getElementById('m-telp').value.trim(),alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:formDpp_('mesin'),ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,admin:Number(document.getElementById('m-admin').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0};
+  const data={salesId:currentSalesId,tglPO:document.getElementById('m-tgl-po').value,noPO:document.getElementById('m-no-po').value,noInv:document.getElementById('m-no-inv').value,tglInv:document.getElementById('m-tgl-inv').value,sales:document.getElementById('m-sales').value,customer:document.getElementById('m-customer').value,pic:document.getElementById('m-pic').value,npwp:document.getElementById('m-npwp').value.trim(),telp:document.getElementById('m-telp').value.trim(),alamat:document.getElementById('m-alamat').value,barang:aggBarang,qty:aggQty,seri:aggSeri,items:cleanItems,dpp:formDpp_('mesin'),ppn:Number(document.getElementById('m-ppn').value)||0,discount:Number(document.getElementById('m-discount').value)||0,pph:Number(document.getElementById('m-pph').value)||0,admin:Number(document.getElementById('m-admin').value)||0,total:Number(document.getElementById('m-total').value)||0,status:document.getElementById('m-status').value,tglLunas:document.getElementById('m-tgl-lunas').value,ket:document.getElementById('m-ket').value,tglKirim:document.getElementById('m-tgl-kirim').value,tglSetup:document.getElementById('m-tgl-setup').value,jenis:'Mesin',ar:Number(document.getElementById('m-ar').value)||0,tarik:willReject?tarikV:'',tglTarik:willReject?tglTarikV:''};
   const cleanPay=labelPayments_(payRows);
   data.payments=cleanPay;
   data.planned=cleanPlans_(planRows);   // Rencana Pembayaran
@@ -3125,7 +3231,7 @@ async function saveMesin(){
   await saveData();closeModal('modal-mesin');renderSidebar();renderMain();
   syncBuktiFiles_(db.mesin.find(m=>m.id===finalId), oldPaysM);
   offerSaveCustomer_(db.mesin.find(m=>m.id===finalId));
-  toast('Data mesin disimpan');
+  toast(willReject&&!editWasReject_?'Disimpan · transaksi dipindah ke Penjualan Reject':(!willReject&&editWasReject_?'Disimpan · transaksi kembali ke Penjualan Mesin':'Data mesin disimpan'));
 }
 async function deleteMesin(id){
   if(!confirm('Hapus data ini?')) return;
@@ -4302,9 +4408,9 @@ function exportXLSX(){
     put(2,1,{t:'s',v:'◄ Klik tanda ▼ di "Filter PIC" lalu pilih nama PIC. Centang (Select All) untuk menampilkan semua PIC.',s:{font:{name:F,sz:9,italic:true,color:{rgb:'7A8699'}}}});
     R=4;
     const firstData=R; const totalCells=[];
-    const salesList=db.sales.filter(sl=>[...db.mesin,...db.spare].some(r=>r.salesId===sl.id));
+    const salesList=db.sales.filter(sl=>[...mesinAktif_(),...db.spare].some(r=>r.salesId===sl.id));
     salesList.forEach(sl=>{
-      const recs=[...db.mesin.filter(r=>r.salesId===sl.id),...db.spare.filter(r=>r.salesId===sl.id)].filter(isShipped_)
+      const recs=[...mesinAktif_().filter(r=>r.salesId===sl.id),...db.spare.filter(r=>r.salesId===sl.id)].filter(isShipped_)
         .sort((a,b)=>String(a.tglPO||'').localeCompare(String(b.tglPO||'')));
       const pic=sl.nama;
       put(R,0,{t:'s',v:pic,s:sPic});
@@ -4355,7 +4461,7 @@ function exportXLSX(){
   // DASHBOARD SHEET
   function buildDash(){
     const ws={};
-    const allRec=[...db.mesin,...db.spare];
+    const allRec=[...mesinAktif_(),...db.spare];
     const totalVal=allRec.reduce((a,r)=>a+num(r.total),0);
     const totalAR=allRec.reduce((a,r)=>a+arActive_(r),0);
     const totalDone=allRec.reduce((a,r)=>a+doneOf_(r),0);
@@ -4378,7 +4484,7 @@ function exportXLSX(){
     const hdr=['No','Sales','Lokasi','Total Trx','Total Nilai','Done Payment','A/R','Lunas','Belum','% Lunas'];
     hdr.forEach((h,i)=>{const col=String.fromCharCode(65+i);ws[`${col}8`]={t:'s',v:h,s:{...boldWhite,...fillColor(C.header),...center(),...border()}};});
     const salesRows=db.sales.map(s=>{
-      const sm=[...db.mesin.filter(m=>m.salesId===s.id),...db.spare.filter(m=>m.salesId===s.id)];
+      const sm=[...mesinAktif_().filter(m=>m.salesId===s.id),...db.spare.filter(m=>m.salesId===s.id)];
       return{sales:s,total:sm.reduce((a,r)=>a+(r.total||0),0),done:sm.reduce((a,r)=>a+doneOf_(r),0),ar:sm.reduce((a,r)=>a+arActive_(r),0),lunas:sm.filter(r=>r.status==='LUNAS').length,belum:sm.filter(isArActive_).length,count:sm.length};
     }).filter(r=>r.count>0);
     salesRows.forEach((r,i)=>{
@@ -4407,14 +4513,14 @@ function exportXLSX(){
       if(!cityS.length) return;
       aoa.push([`${getCityIcon(city)} ${city.toUpperCase()}`,...Array(hdr.length-1).fill('')]);
       cityS.forEach(sales=>{
-        const records=db.mesin.filter(m=>m.salesId===sales.id);
+        const records=mesinAktif_().filter(m=>m.salesId===sales.id);
         if(!records.length){aoa.push(['-','(Belum ada transaksi)',...Array(hdr.length-2).fill('')]);return;}
         records.forEach((r,i)=>{aoa.push([i+1,r.tglPO,sales.nama,r.customer,r.pic,r.barang,r.qty,r.seri,r.dpp,r.ppn,r.total,r.payments[0]?r.payments[0].jumlah:'',r.payments[0]?r.payments[0].tgl:'',r.payments[1]?r.payments[1].jumlah:'',r.payments[1]?r.payments[1].tgl:'',r.payments[2]?r.payments[2].jumlah:'',r.payments[2]?r.payments[2].tgl:'',statusLabel(r.status),r.tglLunas,r.ket,r.tglKirim,r.tglSetup,arActive_(r)]);});
         const tot=records.reduce((a,r)=>a+num(r.total),0);const ar=records.reduce((a,r)=>a+arActive_(r),0);
         aoa.push(['','','','','','SUBTOTAL '+sales.nama,'','','','',tot,'','','','','','','','','','','',ar]);
       });
     });
-    const gT=db.mesin.reduce((a,r)=>a+num(r.total),0);const gA=db.mesin.reduce((a,r)=>a+arActive_(r),0);
+    const gT=mesinAktif_().reduce((a,r)=>a+num(r.total),0);const gA=mesinAktif_().reduce((a,r)=>a+arActive_(r),0);
     aoa.push(['','','','','','GRAND TOTAL','','','','',gT,'','','','','','','','','','','',gA]);
     const ws=XLSX.utils.aoa_to_sheet(aoa);
     const range=XLSX.utils.decode_range(ws['!ref']);
@@ -4516,6 +4622,14 @@ function exportXLSX(){
   XLSX.utils.book_append_sheet(wb,buildDash(),'📊 Dashboard');
   XLSX.utils.book_append_sheet(wb,fixDates(buildMesin()),'🔩 Mesin');
   XLSX.utils.book_append_sheet(wb,fixDates(buildSpare()),'⚙️ Spareparts');
+  // Sheet Penjualan Reject (mesin yang ditarik)
+  { const rj=mesinReject_().sort((a,b)=>String(b.tglTarik||'').localeCompare(String(a.tglTarik||'')));
+    const aoa=[['PENJUALAN REJECT (MESIN DITARIK)'],[],['No','Sales','Lokasi','Customer','PIC','Barang','No Invoice','Tgl PO','Tgl Kirim','Alasan Tarik','Tgl Tarik','Total','Uang Gantung (bayar ber-bukti)']];
+    rj.forEach((r,i)=>{ const s=db.sales.find(x=>x.id===r.salesId)||{}; aoa.push([i+1,s.nama||'',s.kota||'',r.customer||'',r.pic||'',r.barang||'',r.noInv||'',fmtDate(r.tglPO),fmtDate(r.tglKirim),r.tarik||'',fmtDate(r.tglTarik),Number(r.total)||0,uangGantung_(r)]); });
+    if(!rj.length) aoa.push(['','(Belum ada penjualan reject)']);
+    else aoa.push(['','','','','','','','','','','TOTAL',rj.reduce((a,r)=>a+(Number(r.total)||0),0),rj.reduce((a,r)=>a+uangGantung_(r),0)]);
+    const wsR=XLSX.utils.aoa_to_sheet(aoa); wsR['!cols']=[6,12,12,30,16,34,16,12,12,22,12,16,22].map(w=>({wch:w}));
+    XLSX.utils.book_append_sheet(wb,wsR,'⛔ Reject'); }
   XLSX.writeFile(wb,`AR_${ptNama.replace(/[^a-zA-Z0-9]/g,'_')}_${new Date().toISOString().slice(0,10)}.xlsx`);
   toast('Export Excel berhasil!');
 }
