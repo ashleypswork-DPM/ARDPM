@@ -218,6 +218,12 @@ tbody td{padding:8px 11px;vertical-align:top;}
 .no-data{padding:40px;text-align:center;color:var(--text-light);font-size:13px;}
 .status-badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.4px;}
 .status-reject{background:#f3e5f8;color:#8e44ad;}
+.tab-btn.tab-unship.active{color:#d35400;border-bottom-color:#d35400;}
+.status-unship-paid{background:#e8f6ee;color:#1e8449;}
+.status-unship-unpaid{background:#fdecdf;color:#d35400;}
+.summary-card.unship .value{color:#d35400;}
+.summary-card.clickable{cursor:pointer;transition:box-shadow .15s;}
+.summary-card.clickable.on{outline:2px solid var(--primary-light);}
 .summary-card.reject .value{color:#8e44ad;}
 .tab-btn.tab-reject.active{color:#8e44ad;border-bottom-color:#8e44ad;}
 .tarik-box{border:1px dashed #c39bd3;background:#fbf6fd;border-radius:10px;padding:10px 12px;display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;}
@@ -1760,11 +1766,12 @@ function renderMain(){
       <button class="tab-btn ${currentTab==='mesin'?'active':''}" onclick="switchTab('mesin')">🔩 Penjualan Mesin</button>
       <button class="tab-btn ${currentTab==='spare'?'active':''}" onclick="switchTab('spare')">⚙️ Spareparts & Jasa</button>
       <button class="tab-btn tab-reject ${currentTab==='reject'?'active':''}" onclick="switchTab('reject')">⛔ Penjualan Reject${(()=>{const n=mesinReject_().filter(m=>m.salesId===currentSalesId).length;return n?` <span class="status-badge status-reject">${n}</span>`:'';})()}</button>
+      <button class="tab-btn tab-unship ${currentTab==='unship'?'active':''}" onclick="switchTab('unship')">📦 Mesin Belum Terkirim${(()=>{const n=mesinBelumKirim_().filter(m=>m.salesId===currentSalesId).length;return n?` <span class="status-badge status-unship-unpaid">${n}</span>`:'';})()}</button>
     </div>
     <div class="content" id="tab-content"></div>`;
   renderTab();
 }
-function switchTab(t){currentTab=t;renderMain();}
+function switchTab(t){ if(t!==currentTab) unshipFilter_='all'; currentTab=t;renderMain();}
 
 function renderSummary(records){
   const total=records.reduce((a,r)=>a+(r.total||0),0);
@@ -1824,6 +1831,7 @@ function renderTab(){
   if(currentTab==='dash') renderDashTab(tc);
   else if(currentTab==='mesin') renderMesinTab(tc);
   else if(currentTab==='reject') renderRejectTab(tc);
+  else if(currentTab==='unship') renderUnshipTab(tc);
   else renderSpareTab(tc);
 }
 
@@ -2166,6 +2174,49 @@ async function renderRejectTab(tc){
   html+=`</tbody></table></div></div>`;
   tc.innerHTML=html; bindDragScrollAll_();
 }
+// ═══════════════════════════════════════════════════════
+// TAB MESIN BELUM TERKIRIM (Tanggal Kirim masih kosong; tidak termasuk Penjualan Reject)
+//  Kategori 1 "Uang Sudah Masuk": ada pembayaran di History yang sudah ada bukti foto
+//  Kategori 2 "Belum Bayar / Transfer": belum ada pembayaran ber-bukti (invoice tercatat tanpa foto, atau belum ada pembayaran)
+// ═══════════════════════════════════════════════════════
+let unshipFilter_='all';
+function mesinBelumKirim_(){ return mesinAktif_().filter(r=>!isShipped_(r)); }
+function unpaidInv_(r){ return (r.payments||[]).reduce((a,p)=>a+(payVerified_(p)?0:(Number(p.jumlah)||0)),0); }
+function unshipCat_(r){ return verifiedPaid_(r.payments)>0?'paid':'unpaid'; }
+function setUnshipFilter_(f){ unshipFilter_=(unshipFilter_===f&&f!=='all')?'all':f; renderTab(); }
+async function renderUnshipTab(tc){
+  const all=mesinBelumKirim_().filter(m=>m.salesId===currentSalesId).sort((a,b)=>String(b.tglPO||'').localeCompare(String(a.tglPO||'')));
+  const paid=all.filter(r=>unshipCat_(r)==='paid'), unpaid=all.filter(r=>unshipCat_(r)==='unpaid');
+  const sum=(arr,f)=>arr.reduce((a,r)=>a+f(r),0);
+  const recs=unshipFilter_==='paid'?paid:unshipFilter_==='unpaid'?unpaid:all;
+  let html=`<div class="summary-grid">
+    <div class="summary-card clickable ${unshipFilter_==='all'?'on':''}" onclick="setUnshipFilter_('all')"><div class="label">Total Mesin Belum Terkirim</div><div class="value">${all.length}</div><div class="sub">Nilai ${fmt(sum(all,r=>Number(r.total)||0))}</div></div>
+    <div class="summary-card success clickable ${unshipFilter_==='paid'?'on':''}" onclick="setUnshipFilter_('paid')"><div class="label">💰 Uang Sudah Masuk</div><div class="value" style="font-size:14px">${fmt(sum(paid,r=>verifiedPaid_(r.payments)))}</div><div class="sub">${paid.length} transaksi · pembayaran sudah ada bukti foto</div></div>
+    <div class="summary-card unship clickable ${unshipFilter_==='unpaid'?'on':''}" onclick="setUnshipFilter_('unpaid')"><div class="label">⏳ Belum Bayar / Transfer</div><div class="value">${unpaid.length} <span style="font-size:12px;font-weight:600">transaksi</span></div><div class="sub">Nilai ${fmt(sum(unpaid,r=>Number(r.total)||0))}</div></div>
+    <div class="summary-card"><div class="label">Invoice Belum Ada Bukti</div><div class="value" style="font-size:14px">${fmt(sum(all,unpaidInv_))}</div><div class="sub">tercatat di History, belum upload foto</div></div>
+  </div>
+  <div class="table-wrap"><div class="table-toolbar" style="font-size:11.5px;color:var(--text-light)">
+    ${unshipFilter_==='all'?'Menampilkan semua mesin yang belum ada Tanggal Kirim.':`Filter: <b>${unshipFilter_==='paid'?'Uang Sudah Masuk':'Belum Bayar / Transfer'}</b> · <a href="#" onclick="setUnshipFilter_('all');return false">tampilkan semua</a>`}
+    <span style="margin-left:auto">Klik kartu di atas untuk menyaring · isi Tanggal Kirim di ✏️ Edit kalau mesin sudah dikirim</span>
+  </div><div class="table-scroll"><table id="table-unship">
+    <thead><tr><th>No</th><th>Tgl PO</th><th>No Inv</th><th>Customer</th><th>Nama Barang</th><th>QTY</th><th>TOTAL</th><th>History Pay</th><th>Uang Masuk<br>(ada bukti)</th><th>Invoice Belum<br>Ada Bukti</th><th>Kategori</th><th>Aksi</th></tr></thead><tbody>`;
+  for(const [i,r] of recs.entries()){
+    const chips=await renderPayChips(r.payments,r.id,'mesin');
+    const masuk=verifiedPaid_(r.payments), blm=unpaidInv_(r), cat=unshipCat_(r);
+    html+=`<tr><td>${i+1}</td><td>${fmtDate(r.tglPO)}</td><td>${escAttr_(r.noInv||'-')}</td>
+      <td><b>${r.customer}</b><br><span class="text-sm">${r.pic||''}</span></td>
+      <td><b>${r.barang}</b><br><span class="text-sm" style="cursor:pointer;color:var(--primary-light)" onclick="showItemDetail('${r.id}','mesin')">🔎 Rincian (${(r.items&&r.items.length)||1} barang)</span></td>
+      <td>${r.qty}</td><td class="text-right currency"><b>${fmt(r.total)}</b></td><td>${chips}</td>
+      <td class="text-right currency" style="color:var(--lunas)"><b>${masuk?fmt(masuk):'-'}</b></td>
+      <td class="text-right currency" style="color:#d35400">${blm?fmt(blm)+' ⚠️':'-'}</td>
+      <td>${cat==='paid'?'<span class="status-badge status-unship-paid">UANG SUDAH MASUK</span>':`<span class="status-badge status-unship-unpaid">BELUM BAYAR</span>${(r.payments||[]).length?'':'<br><span class="text-sm">belum ada invoice</span>'}`}</td>
+      <td style="white-space:nowrap"><button class="btn btn-outline" style="margin-bottom:3px;font-size:10px" onclick="printInvoice('${r.id}','mesin')" title="Cetak Invoice">🖨️</button> <button class="btn btn-warning" style="margin-bottom:3px;font-size:10px" onclick="editMesin('${r.id}')" title="Edit / isi Tanggal Kirim">✏️</button></td></tr>`;
+  }
+  if(!recs.length) html+=`<tr><td colspan="12" class="no-data">${all.length?'Tidak ada transaksi di kategori ini':'Semua mesin sales ini sudah terkirim 👍'}</td></tr>`;
+  html+=`</tbody></table></div></div>`;
+  tc.innerHTML=html; bindDragScrollAll_();
+}
+
 // Tabel ringkas Penjualan Reject untuk Dashboard (utama: withSales=true)
 function rejectTableHTML_(recs,withSales){
   const sorted=[...recs].sort((a,b)=>String(b.tglTarik||'').localeCompare(String(a.tglTarik||'')));
